@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Стратегия ЛесДал: Интерактивный план CMO</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            scroll-behavior: smooth;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 250px;
+            }
+        }
+        .funnel-step {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .funnel-step:hover, .funnel-step.active {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border-color: #059669;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f5f5f4; }
+        ::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800 font-sans antialiased">
+
+    <nav class="bg-white border-b border-stone-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded bg-emerald-700 flex items-center justify-center text-white font-bold text-xl leading-none">Л</div>
+                    <span class="font-bold text-xl tracking-tight text-emerald-900">ЛесДал</span>
+                    <span class="ml-2 px-2 py-1 bg-stone-100 text-stone-600 text-xs font-medium rounded hidden sm:block">CMO Dashboard</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="#strategy" class="text-stone-600 hover:text-emerald-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Главный шаг</a>
+                    <a href="#funnel" class="text-stone-600 hover:text-emerald-700 px-3 py-2 rounded-md text-sm font-medium transition-colors hidden sm:block">Воронка</a>
+                    <a href="#audience" class="text-stone-600 hover:text-emerald-700 px-3 py-2 rounded-md text-sm font-medium transition-colors hidden md:block">Аудитория</a>
+                    <a href="#economics" class="text-stone-600 hover:text-emerald-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Экономика</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <section id="strategy" class="mb-16">
+            <div class="bg-white rounded-2xl shadow-sm border border-stone-100 p-8 md:p-12 relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-16 -mr-16 w-64 h-64 bg-emerald-50 rounded-full opacity-50 pointer-events-none"></div>
+                
+                <p class="text-emerald-700 font-semibold tracking-wide uppercase text-sm mb-3">Ответ на Ваш запрос, Владимир</p>
+                <h1 class="text-3xl md:text-5xl font-extrabold text-stone-900 mb-6 leading-tight">
+                    Инструмент №1 с максимальной отдачей прямо сейчас
+                </h1>
+                
+                <div class="bg-emerald-700 text-white rounded-xl p-6 md:p-8 shadow-lg relative z-10 mb-8 transform transition hover:scale-[1.01]">
+                    <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
+                        <div class="text-5xl font-black opacity-80">№1</div>
+                        <div>
+                            <h2 class="text-2xl font-bold mb-2">Автоматизированная воронка «Троянский конь»</h2>
+                            <p class="text-emerald-100 text-lg">
+                                Отказ от прямой рекламы продуктов (которую банят ВКонтакте и Директ) в пользу рекламы <strong>нейтрального лид-магнита</strong> (вебинар/PDF «Гайд по энергии в BANI-мире»). Сбор базы в Telegram-бота → автовебинар → триггерная допродажа.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8 text-stone-600">
+                    <div>
+                        <h3 class="font-bold text-stone-800 text-lg mb-3 flex items-center gap-2">
+                            <span class="text-red-500 text-xl">&#x26A0;</span> Проблема (почему мы теряем деньги)
+                        </h3>
+                        <p class="mb-2">Прямая реклама мухомора, ежовика и ноотропов жестко блокируется модерацией.</p>
+                        <p>Мы тратим ресурсы на обход банов, аккаунты улетают в блок, алгоритмы не успевают обучиться. Как итог: нестабильный трафик, дорогой лид, невозможность масштабироваться.</p>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-stone-800 text-lg mb-3 flex items-center gap-2">
+                            <span class="text-emerald-600 text-xl">&#x2714;</span> Решение (почему это выстрелит)
+                        </h3>
+                        <p class="mb-2">Рекламируем информационный продукт (решение боли: тревожность, туман в голове).</p>
+                        <p>Модерация пропускает рекламу «бесплатного вебинара о биохакинге». Мы дешево собираем базу подписчиков в Telegram-бота, прогреваем контентом и делаем оффер уже внутри нашей <strong>собственной экосистемы</strong>, где нет модераторов.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="funnel" class="mb-16">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-stone-900">Архитектура воронки (CJM)</h2>
+                <p class="text-stone-600 mt-2">Кликните на каждый этап, чтобы увидеть механику работы и требуемые ресурсы.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-5 flex flex-col gap-3" id="funnel-container"></div>
+                <div class="lg:col-span-7">
+                    <div id="funnel-detail" class="bg-white rounded-xl shadow-sm border border-stone-200 p-8 h-full min-h-[300px] transition-all duration-300">
+                        <div class="text-center text-stone-400 mt-20">
+                            <div class="text-6xl mb-4">&#x2190;</div>
+                            <p class="text-lg">Выберите этап воронки для просмотра деталей стратегии.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="audience" class="mb-16">
+            <div class="mb-8 border-b border-stone-200 pb-5">
+                <h2 class="text-2xl font-bold text-stone-900">Психографическая сегментация &amp; офферы</h2>
+                <p class="text-stone-600 mt-2">Основано на модели Psychea. Для каждого сегмента нужен свой лид-магнит в начале воронки.</p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden">
+                <div class="flex border-b border-stone-200 overflow-x-auto" id="audience-tabs">
+                    <button type="button" class="tab-btn px-6 py-4 font-medium text-sm focus:outline-none transition-colors border-b-2 border-emerald-600 text-emerald-700 bg-emerald-50 whitespace-nowrap" data-target="seg-independent">Независимые (Биохакеры)</button>
+                    <button type="button" class="tab-btn px-6 py-4 font-medium text-sm text-stone-500 hover:text-stone-700 hover:bg-stone-50 focus:outline-none transition-colors border-b-2 border-transparent whitespace-nowrap" data-target="seg-hedonist">Гедонисты (Энергия)</button>
+                    <button type="button" class="tab-btn px-6 py-4 font-medium text-sm text-stone-500 hover:text-stone-700 hover:bg-stone-50 focus:outline-none transition-colors border-b-2 border-transparent whitespace-nowrap" data-target="seg-traditional">Традиционалисты (Здоровье)</button>
+                </div>
+
+                <div class="p-6 md:p-8 min-h-[280px] relative">
+                    <div id="seg-independent" class="tab-content">
+                        <div class="flex items-start gap-4 mb-4">
+                            <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-2xl">&#x1F9E0;</div>
+                            <div>
+                                <h3 class="text-xl font-bold text-stone-900">Независимые: рациональные достигаторы</h3>
+                                <p class="text-stone-500 text-sm">IT, предприниматели, топ-менеджеры.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            <div class="bg-stone-50 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Ключевая боль</span>
+                                <p class="text-stone-800">Туман в голове, нехватка фокуса для решения сложных задач, выгорание от перегрузок.</p>
+                            </div>
+                            <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-emerald-600 mb-1 block">Наш лид-магнит (приманка)</span>
+                                <p class="text-stone-800 font-medium">«Топ-5 ноотропных связок для 10x фокуса» (PDF + вход в бота).</p>
+                            </div>
+                            <div class="md:col-span-2">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Конечный продукт</span>
+                                <p class="text-stone-800">Ежовик гребенчатый (нейрогенез) + комплексные ноотропы.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="seg-hedonist" class="tab-content hidden">
+                         <div class="flex items-start gap-4 mb-4">
+                            <div class="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-2xl">&#x26A1;</div>
+                            <div>
+                                <h3 class="text-xl font-bold text-stone-900">Гедонисты: искатели энергии и драйва</h3>
+                                <p class="text-stone-500 text-sm">Творческие профессии, фрилансеры, тусовщики.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            <div class="bg-stone-50 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Ключевая боль</span>
+                                <p class="text-stone-800">Апатия, нехватка сил на жизнь после работы, тревожность BANI-мира мешает радоваться.</p>
+                            </div>
+                            <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-emerald-600 mb-1 block">Наш лид-магнит (приманка)</span>
+                                <p class="text-stone-800 font-medium">Вебинар: «Как хакнуть тревожность и вернуть энергию легальными природными средствами».</p>
+                            </div>
+                            <div class="md:col-span-2">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Конечный продукт</span>
+                                <p class="text-stone-800">Микродозинг красного мухомора (снятие тревожности) + кордицепс (энергия).</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="seg-traditional" class="tab-content hidden">
+                         <div class="flex items-start gap-4 mb-4">
+                            <div class="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-2xl">&#x1F33F;</div>
+                            <div>
+                                <h3 class="text-xl font-bold text-stone-900">Традиционалисты: приверженцы натуропатии</h3>
+                                <p class="text-stone-500 text-sm">Аудитория 40+, сторонники ЗОЖ и народной медицины.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                            <div class="bg-stone-50 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Ключевая боль</span>
+                                <p class="text-stone-800">Падение иммунитета, недоверие к «химии» и фарме, хронические заболевания.</p>
+                            </div>
+                            <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-lg">
+                                <span class="text-xs font-bold uppercase text-emerald-600 mb-1 block">Наш лид-магнит (приманка)</span>
+                                <p class="text-stone-800 font-medium">Статья/видео: «Забытые секреты сибирского здоровья: от чаги до целебных грибов».</p>
+                            </div>
+                            <div class="md:col-span-2">
+                                <span class="text-xs font-bold uppercase text-stone-400 mb-1 block">Конечный продукт</span>
+                                <p class="text-stone-800">Чага, экстракты грибов (базовый иммунитет, очищение организма).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="economics" class="mb-16">
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-stone-900">Прогноз unit-экономики (сравнение моделей)</h2>
+                <p class="text-stone-600 mt-2">Переход от прямой рекламы (которую банят) к контентной воронке меняет соотношение CAC и LTV.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                    <h3 class="text-lg font-bold text-stone-800 mb-4 text-center">Прямая реклама vs воронка «ЛесДал»</h3>
+                    <div class="chart-container">
+                        <canvas id="cacLtvChart"></canvas>
+                    </div>
+                    <p class="text-xs text-stone-500 mt-4 text-center">
+                        Модель: прямая реклама — редкие дорогие продажи без привязки к бренду. Воронка дешево собирает базу, за счёт триггеров и комьюнити клиент покупает чаще (выше LTV). Цифры иллюстративные — подставьте свои.
+                    </p>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-stone-800 mb-4 text-center">Прогноз конверсии («Троянский конь»)</h3>
+                        <div class="chart-container">
+                            <canvas id="conversionFunnelChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-6 bg-stone-50 rounded-lg p-4 border border-stone-100">
+                        <h4 class="font-bold text-sm text-stone-700 mb-2">Главный инсайт аналитики</h4>
+                        <p class="text-sm text-stone-600">Смещаем KPI со «стоимости покупки в лоб» на <strong>«стоимость подписчика в бота» (CPA ≈ 60–100 ₽)</strong>. Окупаемость воронки закладывайте на окне 30–45 дней за счёт авто-дожимов и промокодов.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-16">
+            <div class="bg-stone-900 rounded-2xl p-8 md:p-12 text-white shadow-xl">
+                <h2 class="text-3xl font-bold mb-6 text-emerald-400">План действий на ближайшие 14 дней</h2>
+                <p class="text-stone-300 mb-8 max-w-2xl">Сначала технический скелет, затем трафик для теста гипотез УТП.</p>
+                <div class="space-y-4" id="todo-list">
+                    <label class="flex items-start gap-4 p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition cursor-pointer border border-stone-700">
+                        <div class="relative flex items-center justify-center w-6 h-6 mt-0.5">
+                            <input type="checkbox" class="peer appearance-none w-6 h-6 border-2 border-stone-500 rounded checked:bg-emerald-500 checked:border-emerald-500 transition-colors">
+                            <span class="absolute text-white pointer-events-none opacity-0 peer-checked:opacity-100 font-bold text-sm">&#x2713;</span>
+                        </div>
+                        <div>
+                            <span class="font-bold text-lg block text-stone-100">Сборка Telegram-бота (ядро)</span>
+                            <span class="text-stone-400 text-sm block mt-1">Автоворонка: PDF-магнит (SaleBot, Senler и аналоги). 5 прогревающих сообщений (сторителлинг).</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-4 p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition cursor-pointer border border-stone-700">
+                        <div class="relative flex items-center justify-center w-6 h-6 mt-0.5">
+                            <input type="checkbox" class="peer appearance-none w-6 h-6 border-2 border-stone-500 rounded checked:bg-emerald-500 checked:border-emerald-500 transition-colors">
+                            <span class="absolute text-white pointer-events-none opacity-0 peer-checked:opacity-100 font-bold text-sm">&#x2713;</span>
+                        </div>
+                        <div>
+                            <span class="font-bold text-lg block text-stone-100">Упаковка лид-магнита</span>
+                            <span class="text-stone-400 text-sm block mt-1">Лучший ролик с YouTube (lesdal) → PDF-гайд или статья на VC.ru с переливом в бота.</span>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-4 p-4 rounded-lg bg-stone-800 hover:bg-stone-700 transition cursor-pointer border border-stone-700">
+                        <div class="relative flex items-center justify-center w-6 h-6 mt-0.5">
+                            <input type="checkbox" class="peer appearance-none w-6 h-6 border-2 border-stone-500 rounded checked:bg-emerald-500 checked:border-emerald-500 transition-colors">
+                            <span class="absolute text-white pointer-events-none opacity-0 peer-checked:opacity-100 font-bold text-sm">&#x2713;</span>
+                        </div>
+                        <div>
+                            <span class="font-bold text-lg block text-stone-100">Директ и ВК на «белую» цель</span>
+                            <span class="text-stone-400 text-sm block mt-1">Look-alike на покупателей. Креативы про боль и пользу, без формулировок под бан. UTM на все ссылки.</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const funnelStepsData = [
+                {
+                    id: 'step-traffic',
+                    title: '1. Трафик (белый)',
+                    metric: 'Показы/клик',
+                    color: 'bg-stone-100 text-stone-700',
+                    border: 'border-stone-300',
+                    detailTitle: 'Этап 1: обход модерации (трафик)',
+                    detailContent: `<p class="mb-3"><strong>Инструменты:</strong> Яндекс.Директ (РСЯ), ВКонтакте (таргет), статьи (VC.ru, Habr).</p>
+                        <p class="mb-3"><strong>Суть:</strong> Не продаём в лоб ежовик или мухомор. Рекламируем нейтральный контент: <em>«Топ-5 привычек биохакера для возврата фокуса»</em> или <em>«Гайд по энергии»</em>.</p>
+                        <div class="bg-stone-50 p-3 mt-4 rounded border-l-4 border-stone-400">
+                            <span class="text-xs uppercase text-stone-500 font-bold">KPI этапа</span>
+                            <p class="text-sm">CTR объявлений &gt; 1,5 %; CPC обычно ниже при «мягкой» теме креатива.</p>
+                        </div>`
+                },
+                {
+                    id: 'step-capture',
+                    title: '2. Telegram-бот (сбор)',
+                    metric: 'Подписки',
+                    color: 'bg-emerald-50 text-emerald-800',
+                    border: 'border-emerald-300',
+                    detailTitle: 'Этап 2: аккумуляция актива',
+                    detailContent: `<p class="mb-3"><strong>Инструменты:</strong> мини-лендинг (Taplink/Tilda), бот (SaleBot и др.).</p>
+                        <p class="mb-3"><strong>Суть:</strong> Один клик «получить гайд в Telegram» — трафик в контролируемой среде.</p>
+                        <div class="bg-emerald-50 p-3 mt-4 rounded border-l-4 border-emerald-400">
+                            <span class="text-xs uppercase text-emerald-700 font-bold">KPI этапа</span>
+                            <p class="text-sm">Конверсия лендинг → бот &gt; 40 %. CPA подписчика до ~100 ₽ (гипотеза для теста).</p>
+                        </div>`
+                },
+                {
+                    id: 'step-nurture',
+                    title: '3. Автовебинар и прогрев',
+                    metric: 'Вовлечённость',
+                    color: 'bg-emerald-100 text-emerald-900',
+                    border: 'border-emerald-400',
+                    detailTitle: 'Этап 3: создание потребности',
+                    detailContent: `<p class="mb-3"><strong>Инструменты:</strong> Bizon365 или аналог, цепочка в боте.</p>
+                        <p class="mb-3"><strong>Суть:</strong> Гайд + 3–4 сообщения с пользой → приглашение на автовебинар → контент и оффер курса.</p>
+                        <div class="bg-emerald-100 p-3 mt-4 rounded border-l-4 border-emerald-500">
+                            <span class="text-xs uppercase text-emerald-800 font-bold">Копирайтинг</span>
+                            <p class="text-sm">Ясное обещание, доказательства, призыв к действию (УТП).</p>
+                        </div>`
+                },
+                {
+                    id: 'step-sale',
+                    title: '4. Оффер и продажа',
+                    metric: 'Выручка (ROAS)',
+                    color: 'bg-emerald-600 text-white',
+                    border: 'border-emerald-700',
+                    detailTitle: 'Этап 4: монетизация базы',
+                    detailContent: `<p class="mb-3"><strong>Инструменты:</strong> сайт Lesdal.ru, корзина, оплата.</p>
+                        <p class="mb-3"><strong>Суть:</strong> После автовебинара или в следующем сообщении — закрытая страница со спец-оффером (например, 24 ч).</p>
+                        <div class="bg-emerald-700 p-3 mt-4 rounded border-l-4 border-emerald-900 text-emerald-50">
+                            <span class="text-xs uppercase text-emerald-200 font-bold">Отличие</span>
+                            <p class="text-sm">Продажа прогретой аудитории; возражения закрываются этапом образования.</p>
+                        </div>`
+                },
+                {
+                    id: 'step-ltv',
+                    title: '5. Комьюнити (LTV)',
+                    metric: 'Повторные покупки',
+                    color: 'bg-stone-900 text-white',
+                    border: 'border-black',
+                    detailTitle: 'Этап 5: цикл LTV',
+                    detailContent: `<p class="mb-3"><strong>Инструменты:</strong> Telegram-чат «Мухомор Сила», email-триггеры.</p>
+                        <p class="mb-3"><strong>Суть:</strong> Через 21 день после курса — «как самочувствие?» + промокод на продление.</p>
+                        <div class="bg-stone-800 p-3 mt-4 rounded border-l-4 border-stone-500 text-stone-200">
+                            <span class="text-xs uppercase text-stone-400 font-bold">Удержание</span>
+                            <p class="text-sm">Амбассадоры и UGC внутри комьюнити; инфлюенс точечно.</p>
+                        </div>`
+                }
+            ];
+
+            const container = document.getElementById('funnel-container');
+            const detailPanel = document.getElementById('funnel-detail');
+
+            funnelStepsData.forEach((step, index) => {
+                const widthPercent = 100 - (index * 12);
+                container.innerHTML += `
+                    <div class="funnel-step ${step.color} ${step.border} border rounded-lg p-4 flex justify-between items-center shadow-sm"
+                         style="width: ${widthPercent}%; margin-left: auto; margin-right: auto;"
+                         data-index="${index}" role="button" tabindex="0">
+                        <div class="font-bold">${step.title}</div>
+                        <div class="text-xs uppercase tracking-wider opacity-80">${step.metric}</div>
+                    </div>`;
+            });
+
+            const steps = document.querySelectorAll('.funnel-step');
+            function showStep(idx) {
+                const stepEl = steps[idx];
+                if (!stepEl) return;
+                steps.forEach(s => s.classList.remove('active', 'ring-2', 'ring-offset-2', 'ring-emerald-500'));
+                stepEl.classList.add('active', 'ring-2', 'ring-offset-2', 'ring-emerald-500');
+                const data = funnelStepsData[idx];
+                detailPanel.style.opacity = '0';
+                setTimeout(() => {
+                    detailPanel.innerHTML = `
+                        <div class="h-full flex flex-col">
+                            <h3 class="text-2xl font-bold text-stone-900 mb-4 pb-2 border-b border-stone-100">${data.detailTitle}</h3>
+                            <div class="text-stone-700 leading-relaxed flex-grow">${data.detailContent}</div>
+                        </div>`;
+                    detailPanel.style.opacity = '1';
+                }, 150);
+            }
+
+            steps.forEach((step, i) => {
+                step.addEventListener('click', () => showStep(i));
+                step.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showStep(i); }
+                });
+            });
+            setTimeout(() => showStep(0), 300);
+
+            const tabBtns = document.querySelectorAll('.tab-btn');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.getAttribute('data-target');
+                    tabBtns.forEach(b => {
+                        const on = b === btn;
+                        b.classList.toggle('border-emerald-600', on);
+                        b.classList.toggle('text-emerald-700', on);
+                        b.classList.toggle('bg-emerald-50', on);
+                        b.classList.toggle('border-transparent', !on);
+                        b.classList.toggle('text-stone-500', !on);
+                    });
+                    tabContents.forEach(c => {
+                        const on = c.id === targetId;
+                        c.classList.toggle('hidden', !on);
+                    });
+                });
+            });
+
+            Chart.defaults.font.family = "'Inter', sans-serif";
+            Chart.defaults.color = '#78716c';
+
+            new Chart(document.getElementById('cacLtvChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Прямая реклама (ВК/Директ)', 'Воронка «Троянский конь»'],
+                    datasets: [
+                        {
+                            label: 'CAC, ₽',
+                            data: [3500, 800],
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        },
+                        {
+                            label: 'LTV (1 год), ₽',
+                            data: [4200, 12500],
+                            backgroundColor: '#10b981',
+                            borderRadius: 4,
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(28, 25, 23, 0.9)',
+                            titleFont: { size: 13 },
+                            bodyFont: { size: 14, weight: 'bold' },
+                            padding: 10
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#f5f5f4' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+
+            new Chart(document.getElementById('conversionFunnelChart').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Охват рекламы', 'Клик', 'Подписка в бота', 'Вебинар', 'Покупка'],
+                    datasets: [{
+                        label: 'Чел. из 10 000 охвата',
+                        data: [10000, 300, 120, 45, 12],
+                        backgroundColor: ['#d6d3d1', '#a8a29e', '#6ee7b7', '#10b981', '#047857'],
+                        borderRadius: 4,
+                        barPercentage: 0.8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(28, 25, 23, 0.9)',
+                            displayColors: false,
+                            callbacks: {
+                                label(ctx) {
+                                    const v = ctx.raw;
+                                    return `${v} чел. (${(v / 10000 * 100).toFixed(1)} % от старта)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, display: false, grid: { display: false } },
+                        y: { grid: { display: false } }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

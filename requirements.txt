@@ -1,0 +1,12 @@
+# LesDal Content Pipeline — зависимости
+# Установка: pip install -r requirements.txt
+
+google-genai>=1.0.0
+python-telegram-bot>=20.7
+python-dotenv>=1.0.0
+feedparser>=6.0.0
+requests>=2.31.0
+google-api-python-client>=2.169.0
+google-auth>=2.40.0
+
+# openai>=1.40.0  # отключён — нет баланса; генерация текста переведена на Gemini

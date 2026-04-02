@@ -1,0 +1,841 @@
+{
+  "products": [
+    {
+      "sku": "royal-amanita-whole-2025",
+      "category": "griby",
+      "name": "Шляпки королевского мухомора целые 2025",
+      "form": "целые шляпки",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["королевский", "мухомор", "шляпки", "целые"],
+      "options": [
+        {"label": "100 г", "price_rub": 5000},
+        {"label": "50 г", "price_rub": 2500}
+      ]
+    },
+    {
+      "sku": "panther-amanita-whole-2025",
+      "category": "griby",
+      "name": "Шляпки пантерного мухомора целые 2025",
+      "form": "целые шляпки",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["пантерный", "пантерный мухомор", "мухомор", "шляпки", "целые"],
+      "options": [
+        {"label": "100 г", "price_rub": 8000},
+        {"label": "50 г", "price_rub": 4000},
+        {"label": "25 г", "price_rub": 2000}
+      ]
+    },
+    {
+      "sku": "panther-amanita-powder-2025",
+      "category": "griby",
+      "name": "Шляпки пантерного мухомора порошок 2025",
+      "form": "порошок",
+      "notes": "Шаманка.",
+      "tags": ["пантерный", "пантерный мухомор", "мухомор", "порошок", "шаманка"],
+      "options": [
+        {"label": "100 г", "price_rub": 8000},
+        {"label": "50 г", "price_rub": 4000},
+        {"label": "25 г", "price_rub": 2000}
+      ]
+    },
+    {
+      "sku": "panther-amanita-capsules-2025",
+      "category": "griby",
+      "name": "Пантерный мухомор в капсулах 0.45 г 2025",
+      "form": "капсулы",
+      "notes": "Сбор 2025.",
+      "tags": ["пантерный", "пантерный мухомор", "мухомор", "капсулы"],
+      "options": [
+        {"label": "96 шт", "price_rub": 3500},
+        {"label": "64 шт", "price_rub": 2400},
+        {"label": "32 шт", "price_rub": 1200}
+      ]
+    },
+    {
+      "sku": "red-amanita-whole-2025",
+      "category": "griby",
+      "name": "Шляпки красного мухомора целые 2025",
+      "form": "целые шляпки",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["красный", "красный мухомор", "мухомор", "шляпки", "целые"],
+      "options": [
+        {"label": "100 г", "price_rub": 3000},
+        {"label": "50 г", "price_rub": 1500},
+        {"label": "25 г", "price_rub": 800}
+      ]
+    },
+    {
+      "sku": "red-amanita-powder-2025",
+      "category": "griby",
+      "name": "Молотые шляпки красного мухомора порошок 2025",
+      "form": "порошок",
+      "notes": "Шаманка.",
+      "tags": ["красный", "красный мухомор", "мухомор", "порошок", "шаманка"],
+      "options": [
+        {"label": "100 г", "price_rub": 3000},
+        {"label": "50 г", "price_rub": 1500},
+        {"label": "25 г", "price_rub": 800}
+      ]
+    },
+    {
+      "sku": "red-amanita-capsules-2025",
+      "category": "griby",
+      "name": "Красный мухомор в капсулах 0.55 г 2025",
+      "form": "капсулы",
+      "notes": "Сбор 2025.",
+      "tags": ["красный", "красный мухомор", "мухомор", "капсулы"],
+      "options": [
+        {"label": "96 шт", "price_rub": 2500},
+        {"label": "64 шт", "price_rub": 1800},
+        {"label": "32 шт", "price_rub": 900}
+      ]
+    },
+    {
+      "sku": "red-amanita-whole-2024",
+      "category": "griby",
+      "name": "Шляпки красного мухомора целые 2024",
+      "form": "целые шляпки",
+      "notes": "Акционная линейка.",
+      "tags": ["красный", "красный мухомор", "мухомор", "шляпки", "целые", "2024"],
+      "options": [
+        {"label": "100 г", "price_rub": 2000},
+        {"label": "50 г", "price_rub": 1000},
+        {"label": "25 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "red-amanita-powder-2024",
+      "category": "griby",
+      "name": "Молотые шляпки красного мухомора порошок 2024",
+      "form": "порошок",
+      "notes": "Акционная линейка.",
+      "tags": ["красный", "красный мухомор", "мухомор", "порошок", "2024"],
+      "options": [
+        {"label": "100 г", "price_rub": 2000},
+        {"label": "50 г", "price_rub": 1000},
+        {"label": "25 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "red-amanita-caps-2024",
+      "category": "griby",
+      "name": "Колпачки красного мухомора 2024",
+      "form": "нераскрывшиеся шляпки",
+      "notes": "Колпачки красного мухомора.",
+      "tags": ["красный", "красный мухомор", "мухомор", "колпачки", "нераскрывшиеся"],
+      "options": [
+        {"label": "100 г", "price_rub": 2200},
+        {"label": "50 г", "price_rub": 1100},
+        {"label": "25 г", "price_rub": 600}
+      ]
+    },
+    {
+      "sku": "red-amanita-capsules-2024",
+      "category": "griby",
+      "name": "Красный мухомор в капсулах 2024",
+      "form": "капсулы",
+      "notes": "Акционная линейка.",
+      "tags": ["красный", "красный мухомор", "мухомор", "капсулы", "2024"],
+      "options": [
+        {"label": "96 шт", "price_rub": 1000},
+        {"label": "64 шт", "price_rub": 800},
+        {"label": "32 шт", "price_rub": 400}
+      ]
+    },
+    {
+      "sku": "hericium-powder",
+      "category": "griby",
+      "name": "Ежовик гребенчатый молотый",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["ежовик", "ежовик гребенчатый", "порошок", "молотый"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 600}
+      ]
+    },
+    {
+      "sku": "hericium-whole",
+      "category": "griby",
+      "name": "Ежовик гребенчатый плодовые тела",
+      "form": "плодовые тела",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["ежовик", "ежовик гребенчатый", "плодовые тела"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "hericium-capsules",
+      "category": "griby",
+      "name": "Ежовик гребенчатый в капсулах 0.4 г",
+      "form": "капсулы",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["ежовик", "ежовик гребенчатый", "капсулы"],
+      "options": [
+        {"label": "200 капсул", "price_rub": 1300},
+        {"label": "100 капсул", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "cordyceps-whole",
+      "category": "griby",
+      "name": "Кордицепс военный плодовые тела",
+      "form": "плодовые тела",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["кордицепс", "кордицепс военный", "плодовые тела"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "cordyceps-capsules",
+      "category": "griby",
+      "name": "Кордицепс военный в капсулах 0.5 г",
+      "form": "капсулы",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["кордицепс", "кордицепс военный", "капсулы"],
+      "options": [
+        {"label": "100 шт", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "chanterelle-powder",
+      "category": "griby",
+      "name": "Лисичка сушеная молотая",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["лисичка", "сушеная", "молотая", "порошок"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "chanterelle-whole",
+      "category": "griby",
+      "name": "Лисичка сушеная целая",
+      "form": "целая",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["лисичка", "сушеная", "целая"],
+      "options": [
+        {"label": "100 г", "price_rub": 800},
+        {"label": "50 г", "price_rub": 400}
+      ]
+    },
+    {
+      "sku": "chanterelle-capsules",
+      "category": "griby",
+      "name": "Лисичка в капсулах 0.5-0.6 г",
+      "form": "капсулы",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["лисичка", "капсулы"],
+      "options": [
+        {"label": "100 капсул", "price_rub": 700},
+        {"label": "64 капсулы", "price_rub": 500},
+        {"label": "32 капсулы", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "trametes-whole",
+      "category": "griby",
+      "name": "Траметес плодовые тела",
+      "form": "плодовые тела",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["траметес", "плодовые тела"],
+      "options": [
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "trametes-powder",
+      "category": "griby",
+      "name": "Траметес порошок",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["траметес", "порошок"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "chaga-powder",
+      "category": "griby",
+      "name": "Чага молотая",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["чага", "молотая", "порошок"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "reishi-powder",
+      "category": "griby",
+      "name": "Рейши молотый",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["рейши", "молотый", "порошок"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "larch-resin",
+      "category": "griby",
+      "name": "Камедь лиственницы",
+      "form": "смола",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["камедь", "лиственницы"],
+      "options": [
+        {"label": "100 г", "price_rub": 2000},
+        {"label": "50 г", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "sagan-dailya",
+      "category": "travy",
+      "name": "Чай-энергетик саган-дайля",
+      "form": "чай",
+      "notes": "Акционная линейка.",
+      "tags": ["саган-дайля", "чай", "энергетик"],
+      "options": [
+        {"label": "100 г", "price_rub": 700},
+        {"label": "50 г", "price_rub": 350}
+      ]
+    },
+    {
+      "sku": "usnea-altai",
+      "category": "travy",
+      "name": "Уснея алтайская",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["уснея", "алтайская"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "pine-pollen-2025",
+      "category": "travy",
+      "name": "Сосновая пыльца 2025",
+      "form": "пыльца",
+      "notes": "Сбор 2025.",
+      "tags": ["сосновая пыльца", "пыльца", "сосна"],
+      "options": [
+        {"label": "100 г", "price_rub": 2500},
+        {"label": "50 г", "price_rub": 1250}
+      ]
+    },
+    {
+      "sku": "pine-needles",
+      "category": "travy",
+      "name": "Хвоя сосновая",
+      "form": "для чая",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["хвоя", "сосновая", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 200},
+        {"label": "50 г", "price_rub": 100}
+      ]
+    },
+    {
+      "sku": "cowberry-leaf",
+      "category": "travy",
+      "name": "Брусничный лист",
+      "form": "лист",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["брусничный лист", "лист"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "st-johns-wort",
+      "category": "travy",
+      "name": "Зверобой",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["зверобой"],
+      "options": [
+        {"label": "100 г", "price_rub": 200},
+        {"label": "50 г", "price_rub": 100}
+      ]
+    },
+    {
+      "sku": "ivan-tea",
+      "category": "travy",
+      "name": "Иван-чай",
+      "form": "ферментированный в гранулах",
+      "notes": "Базовый вариант.",
+      "tags": ["иван-чай", "иван чай", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "ivan-tea-fir",
+      "category": "travy",
+      "name": "Иван-чай с пихтой",
+      "form": "ферментированный в гранулах",
+      "notes": "Вариант с добавкой пихты.",
+      "tags": ["иван-чай", "иван чай", "пихта", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "ivan-tea-rhodiola",
+      "category": "travy",
+      "name": "Иван-чай с родиолой",
+      "form": "ферментированный в гранулах",
+      "notes": "Вариант с родиолой.",
+      "tags": ["иван-чай", "иван чай", "родиола", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "ivan-tea-thyme",
+      "category": "travy",
+      "name": "Иван-чай с чабрецом",
+      "form": "ферментированный в гранулах",
+      "notes": "Вариант с чабрецом.",
+      "tags": ["иван-чай", "иван чай", "чабрец", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "caragana",
+      "category": "travy",
+      "name": "Карагана",
+      "form": "трава",
+      "notes": "Новинка.",
+      "tags": ["карагана"],
+      "options": [
+        {"label": "100 г", "price_rub": 500},
+        {"label": "50 г", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "kuril-tea",
+      "category": "travy",
+      "name": "Курильский чай",
+      "form": "чай",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["курильский чай", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "mint-meadow",
+      "category": "travy",
+      "name": "Мята луговая",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мята", "луговая"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "mint-pepper",
+      "category": "travy",
+      "name": "Мята перечная",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мята", "перечная"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "eyebright",
+      "category": "travy",
+      "name": "Очанка",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["очанка"],
+      "options": [
+        {"label": "100 г", "price_rub": 400},
+        {"label": "50 г", "price_rub": 200}
+      ]
+    },
+    {
+      "sku": "rosehip-altai",
+      "category": "travy",
+      "name": "Шиповник алтайский",
+      "form": "ягоды",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["шиповник", "алтайский", "ягоды"],
+      "options": [
+        {"label": "100 г", "price_rub": 500},
+        {"label": "50 г", "price_rub": 250}
+      ]
+    },
+    {
+      "sku": "currant-leaf",
+      "category": "travy",
+      "name": "Смородина лист",
+      "form": "лист",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["смородина", "лист"],
+      "options": [
+        {"label": "100 г", "price_rub": 200},
+        {"label": "50 г", "price_rub": 100}
+      ]
+    },
+    {
+      "sku": "licorice",
+      "category": "travy",
+      "name": "Солодка",
+      "form": "корень",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["солодка"],
+      "options": [
+        {"label": "100 г", "price_rub": 250},
+        {"label": "50 г", "price_rub": 130}
+      ]
+    },
+    {
+      "sku": "yagel-powder",
+      "category": "travy",
+      "name": "Ягель порошок",
+      "form": "порошок",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["ягель", "порошок"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "meadowsweet",
+      "category": "travy",
+      "name": "Таволга",
+      "form": "трава",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["таволга"],
+      "options": [
+        {"label": "100 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "ointment-laurel-eucalyptus",
+      "category": "other",
+      "name": "Мазь суставная Лавр-Эвкалипт",
+      "form": "мазь",
+      "notes": "1 шт.",
+      "tags": ["мазь", "лавр", "эвкалипт"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "ointment-omik",
+      "category": "other",
+      "name": "Мазь Омик 80 мл",
+      "form": "мазь",
+      "notes": "Натуральный состав.",
+      "tags": ["мазь", "омик"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "ointment-maclura",
+      "category": "other",
+      "name": "Мазь Маклюра 80 мл",
+      "form": "мазь",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мазь", "маклюра"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "ointment-bee",
+      "category": "other",
+      "name": "Мазь Пчелиная",
+      "form": "мазь",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мазь", "пчелиная"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "ointment-psoriasis",
+      "category": "other",
+      "name": "Мазь от псориаза",
+      "form": "мазь",
+      "notes": "Натуральная.",
+      "tags": ["мазь", "от псориаза"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "ointment-muscle",
+      "category": "other",
+      "name": "Мазь при мышечной боли",
+      "form": "мазь",
+      "notes": "На травах.",
+      "tags": ["мазь", "мышечная боль"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "extract-astragal",
+      "category": "other",
+      "name": "Экстракт Астрагал",
+      "form": "экстракт",
+      "notes": "100 мл.",
+      "tags": ["экстракт", "астрагал"],
+      "options": [
+        {"label": "100 мл", "price_rub": 1200}
+      ]
+    },
+    {
+      "sku": "extract-red-brush",
+      "category": "other",
+      "name": "Экстракт Красная щетка",
+      "form": "экстракт",
+      "notes": "250 мл.",
+      "tags": ["экстракт", "красная щетка"],
+      "options": [
+        {"label": "250 мл", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "extract-borovaya-matka",
+      "category": "other",
+      "name": "Экстракт Боровая матка",
+      "form": "экстракт",
+      "notes": "100 мл.",
+      "tags": ["экстракт", "боровая матка"],
+      "options": [
+        {"label": "100 мл", "price_rub": 1200}
+      ]
+    },
+    {
+      "sku": "extract-ginseng",
+      "category": "other",
+      "name": "Экстракт Женьшень",
+      "form": "экстракт",
+      "notes": "100 мл.",
+      "tags": ["экстракт", "женьшень"],
+      "options": [
+        {"label": "100 мл", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "extract-yarutka",
+      "category": "other",
+      "name": "Экстракт Ярутки",
+      "form": "экстракт",
+      "notes": "500 мл.",
+      "tags": ["экстракт", "ярутка"],
+      "options": [
+        {"label": "500 мл", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "celandine-oil",
+      "category": "other",
+      "name": "Масло чистотела",
+      "form": "масло",
+      "notes": "200 мл.",
+      "tags": ["масло", "чистотел"],
+      "options": [
+        {"label": "200 мл", "price_rub": 600}
+      ]
+    },
+    {
+      "sku": "black-cumin-oil",
+      "category": "other",
+      "name": "Масло черного тмина холодного отжима",
+      "form": "масло",
+      "notes": "200 мл.",
+      "tags": ["масло", "черный тмин", "черного тмина"],
+      "options": [
+        {"label": "200 мл", "price_rub": 900}
+      ]
+    },
+    {
+      "sku": "rosehip-oil",
+      "category": "other",
+      "name": "Масло шиповника",
+      "form": "масло",
+      "notes": "250 мл.",
+      "tags": ["масло", "шиповник"],
+      "options": [
+        {"label": "250 мл", "price_rub": 1000}
+      ]
+    },
+    {
+      "sku": "mint-oil",
+      "category": "other",
+      "name": "Масло мяты",
+      "form": "масло",
+      "notes": "200 мл.",
+      "tags": ["масло", "мята"],
+      "options": [
+        {"label": "200 мл", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "nettle-shampoo-soap",
+      "category": "other",
+      "name": "Шампунь-мыло Крапива 60 г",
+      "form": "шампунь-мыло",
+      "notes": "Натуральное.",
+      "tags": ["шампунь-мыло", "крапива"],
+      "options": [
+        {"label": "1 шт", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "birch-shampoo-soap",
+      "category": "other",
+      "name": "Шампунь-мыло Березовое 60 г",
+      "form": "шампунь-мыло",
+      "notes": "Натуральное.",
+      "tags": ["шампунь-мыло", "березовое", "берёзовое"],
+      "options": [
+        {"label": "1 шт", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "soap-mumiyo",
+      "category": "other",
+      "name": "Мыло натуральное Мумие 60 г",
+      "form": "мыло",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мыло", "мумие", "мумиё"],
+      "options": [
+        {"label": "1 шт", "price_rub": 200}
+      ]
+    },
+    {
+      "sku": "soap-calendula",
+      "category": "other",
+      "name": "Мыло натуральное Календула 60 г",
+      "form": "мыло",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["мыло", "календула"],
+      "options": [
+        {"label": "1 шт", "price_rub": 200}
+      ]
+    },
+    {
+      "sku": "jewelry-scales",
+      "category": "other",
+      "name": "Весы ювелирные",
+      "form": "весы",
+      "notes": "Актуальный прайс 2026.",
+      "tags": ["весы", "ювелирные"],
+      "options": [
+        {"label": "1 шт", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "tea-huoshan-huangya",
+      "category": "chinese_tea",
+      "name": "Хоушань Хуанья",
+      "form": "китайский чай",
+      "notes": "Желтые почки Хоушаня.",
+      "tags": ["китайский чай", "хоушань хуанья"],
+      "options": [
+        {"label": "100 г", "price_rub": 1600},
+        {"label": "50 г", "price_rub": 800}
+      ]
+    },
+    {
+      "sku": "tea-da-hong-pao",
+      "category": "chinese_tea",
+      "name": "Да Хун Пао",
+      "form": "китайский чай",
+      "notes": "Большой красный халат.",
+      "tags": ["китайский чай", "да хун пао"],
+      "options": [
+        {"label": "100 г", "price_rub": 900},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "tea-qi-men-hong-cha",
+      "category": "chinese_tea",
+      "name": "Ци Мэнь Хун Ча",
+      "form": "китайский чай",
+      "notes": "Красный чай из Цимэня.",
+      "tags": ["китайский чай", "ци мэнь хун ча"],
+      "options": [
+        {"label": "100 г", "price_rub": 600},
+        {"label": "50 г", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "tea-molihua-cha",
+      "category": "chinese_tea",
+      "name": "Молихуа Ча",
+      "form": "китайский чай",
+      "notes": "Жасминовый чай.",
+      "tags": ["китайский чай", "молихуа ча", "жасминовый чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 600},
+        {"label": "50 г", "price_rub": 300}
+      ]
+    },
+    {
+      "sku": "tea-baimudan",
+      "category": "chinese_tea",
+      "name": "Баймудань",
+      "form": "китайский чай",
+      "notes": "Белый пион, выдержка 11 лет.",
+      "tags": ["китайский чай", "баймудань", "белый пион"],
+      "options": [
+        {"label": "блин 355 г", "price_rub": 3900}
+      ]
+    },
+    {
+      "sku": "tea-shu-puer",
+      "category": "chinese_tea",
+      "name": "Шу Пуэр",
+      "form": "китайский чай",
+      "notes": "Выдержка 7 лет.",
+      "tags": ["китайский чай", "шу пуэр", "пуэр"],
+      "options": [
+        {"label": "блин 357 г", "price_rub": 1900}
+      ]
+    },
+    {
+      "sku": "tea-bi-luo-chun",
+      "category": "chinese_tea",
+      "name": "Би Ло Чунь",
+      "form": "китайский чай",
+      "notes": "Зеленая спираль весны.",
+      "tags": ["китайский чай", "би ло чунь"],
+      "options": [
+        {"label": "100 г", "price_rub": 500},
+        {"label": "50 г", "price_rub": 300}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "products": [
+    {
+      "sku": "panther-whole-2025",
+      "category": "griby",
+      "name": "Шляпки пантерного мухомора 2025",
+      "form": "whole",
+      "notes": "Ручной сбор, премиальная линейка.",
+      "tags": ["сон", "фокус", "квалификация"],
+      "options": [
+        {"label": "100 г", "price_rub": 8000},
+        {"label": "50 г", "price_rub": 4000},
+        {"label": "25 г", "price_rub": 2000}
+      ]
+    },
+    {
+      "sku": "panther-capsules-2025",
+      "category": "griby",
+      "name": "Пантерный в капсулах 2025",
+      "form": "capsules",
+      "notes": "Формат для удобного приема.",
+      "tags": ["энергия", "фокус"],
+      "options": [
+        {"label": "96 шт", "price_rub": 3500},
+        {"label": "64 шт", "price_rub": 2400},
+        {"label": "32 шт", "price_rub": 1200}
+      ]
+    },
+    {
+      "sku": "red-whole-2025",
+      "category": "griby",
+      "name": "Шляпки красного мухомора 2025",
+      "form": "whole",
+      "notes": "Свежая линейка 2025 года.",
+      "tags": ["сон", "спокойствие"],
+      "options": [
+        {"label": "100 г", "price_rub": 3000},
+        {"label": "50 г", "price_rub": 1500},
+        {"label": "25 г", "price_rub": 800}
+      ]
+    },
+    {
+      "sku": "red-capsules-2025",
+      "category": "griby",
+      "name": "Красный мухомор в капсулах 2025",
+      "form": "capsules",
+      "notes": "Акционная позиция.",
+      "tags": ["сон", "спокойствие"],
+      "options": [
+        {"label": "96 шт", "price_rub": 2500},
+        {"label": "64 шт", "price_rub": 1800},
+        {"label": "32 шт", "price_rub": 900}
+      ]
+    },
+    {
+      "sku": "hericium-powder",
+      "category": "griby",
+      "name": "Ежовик гребенчатый молотый",
+      "form": "powder",
+      "notes": "Популярный формат для когнитивного фокуса.",
+      "tags": ["фокус", "концентрация"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 600}
+      ]
+    },
+    {
+      "sku": "cordyceps-fruiting-body",
+      "category": "griby",
+      "name": "Кордицепс плодовые тела",
+      "form": "whole",
+      "notes": "Линейка для энергии и тонуса.",
+      "tags": ["энергия", "тонус"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 700}
+      ]
+    },
+    {
+      "sku": "reishi-powder",
+      "category": "griby",
+      "name": "Рейши молотый",
+      "form": "powder",
+      "notes": "Позиция для вечерних и иммунных сценариев.",
+      "tags": ["иммунитет", "спокойствие"],
+      "options": [
+        {"label": "100 г", "price_rub": 1000},
+        {"label": "50 г", "price_rub": 500}
+      ]
+    },
+    {
+      "sku": "chaga-powder",
+      "category": "griby",
+      "name": "Чага молотая",
+      "form": "powder",
+      "notes": "Базовая позиция.",
+      "tags": ["иммунитет", "база"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "ivan-tea",
+      "category": "tea",
+      "name": "Иван чай",
+      "form": "tea",
+      "notes": "Есть вкусовые вариации.",
+      "tags": ["чай", "мягкий вход"],
+      "options": [
+        {"label": "100 г", "price_rub": 300},
+        {"label": "50 г", "price_rub": 150}
+      ]
+    },
+    {
+      "sku": "sagan-dailya",
+      "category": "tea",
+      "name": "Саган дайля",
+      "form": "tea",
+      "notes": "Тонизирующая позиция.",
+      "tags": ["энергия", "чай"],
+      "options": [
+        {"label": "100 г", "price_rub": 900},
+        {"label": "50 г", "price_rub": 450}
+      ]
+    },
+    {
+      "sku": "black-cumin-oil",
+      "category": "other",
+      "name": "Масло черного тмина",
+      "form": "oil",
+      "notes": "Сопутствующий товар.",
+      "tags": ["масло", "иммунитет"],
+      "options": [
+        {"label": "200 мл", "price_rub": 900}
+      ]
+    },
+    {
+      "sku": "mushroom-cream",
+      "category": "other",
+      "name": "Крем с мухомором",
+      "form": "cream",
+      "notes": "Наружное применение.",
+      "tags": ["суставы", "наружное"],
+      "options": [
+        {"label": "50 г", "price_rub": 350}
+      ]
+    }
+  ]
+}

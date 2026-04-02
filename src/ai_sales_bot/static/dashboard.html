@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LesDal Sales Inbox</title>
+  <style>
+    :root {
+      --bg: #f2eadf;
+      --panel: #fffaf2;
+      --panel-strong: #fff4e4;
+      --ink: #2b231c;
+      --muted: #7a6b5e;
+      --accent: #2f6b52;
+      --accent-soft: #d8eadf;
+      --warn: #a04a2d;
+      --line: #dfd0bd;
+      --shadow: 0 18px 40px rgba(43, 35, 28, 0.08);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(47, 107, 82, 0.12), transparent 30%),
+        radial-gradient(circle at bottom left, rgba(160, 74, 45, 0.1), transparent 28%),
+        var(--bg);
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      min-height: 100vh;
+      gap: 18px;
+      padding: 18px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .sidebar-header,
+    .content-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+    }
+    .title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .conversation-list {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: calc(100vh - 150px);
+      overflow: auto;
+    }
+    .conversation-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fff;
+      cursor: pointer;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+    .conversation-item:hover {
+      transform: translateY(-1px);
+      border-color: #c5b19a;
+      background: #fff9f1;
+    }
+    .conversation-item.active {
+      border-color: var(--accent);
+      background: #f3fbf6;
+    }
+    .item-top, .meta-row, .mode-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+    .item-name {
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .item-summary {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge.channel { background: #efe5d7; color: #6f4d2f; }
+    .badge.mode-ai { background: var(--accent-soft); color: var(--accent); }
+    .badge.mode-manager { background: #f9dfd7; color: var(--warn); }
+    .badge.stage { background: #ede7ff; color: #5f468b; }
+    .content {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: calc(100vh - 36px);
+    }
+    .content-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 18px;
+      padding: 18px;
+      min-height: 0;
+    }
+    .thread, .details {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.7);
+      overflow: hidden;
+      min-height: 0;
+    }
+    .thread-list {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      max-height: calc(100vh - 270px);
+      overflow: auto;
+    }
+    .message {
+      padding: 14px 16px;
+      border-radius: 16px;
+      max-width: 88%;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .message.customer { background: #fff0de; align-self: flex-start; }
+    .message.ai { background: #eef7f1; align-self: flex-start; }
+    .message.manager { background: #e8f0ff; align-self: flex-end; }
+    .message.system { background: #f5f0ea; align-self: center; color: var(--muted); }
+    .message-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .details-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: calc(100vh - 270px);
+      overflow: auto;
+    }
+    .detail-block {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.85);
+      border: 1px solid var(--line);
+    }
+    .detail-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(255, 250, 242, 0.75), rgba(255, 250, 242, 1));
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    textarea {
+      width: 100%;
+      min-height: 110px;
+      resize: vertical;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      padding: 14px 16px;
+      font: inherit;
+      color: var(--ink);
+      background: white;
+    }
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, opacity 140ms ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.primary { background: var(--accent); color: white; }
+    button.secondary { background: #eadbc8; color: #5b4534; }
+    button.warn { background: #d56d49; color: white; }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .empty {
+      display: grid;
+      place-items: center;
+      height: 100%;
+      color: var(--muted);
+      text-align: center;
+      padding: 32px;
+    }
+    @media (max-width: 1024px) {
+      .app { grid-template-columns: 1fr; }
+      .content-body { grid-template-columns: 1fr; }
+      .conversation-list { max-height: 320px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <div class="sidebar-header">
+        <h1 class="title">LesDal Inbox</h1>
+        <p class="subtitle">Единое окно для текущих диалогов из Telegram, VK и MAX</p>
+      </div>
+      <div id="conversationList" class="conversation-list"></div>
+    </aside>
+
+    <main class="panel content">
+      <div class="content-header">
+        <h2 id="contentTitle" class="title">Диалог не выбран</h2>
+        <p id="contentSubtitle" class="subtitle">Выберите разговор слева, чтобы открыть историю и перехватить инициативу.</p>
+      </div>
+
+      <div class="content-body">
+        <section class="thread">
+          <div id="threadList" class="thread-list">
+            <div class="empty">Пока нет выбранного диалога.</div>
+          </div>
+        </section>
+
+        <aside class="details">
+          <div id="detailsBody" class="details-body">
+            <div class="empty">Карточка лида появится после выбора диалога.</div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="composer">
+        <div class="actions">
+          <button id="pauseButton" class="secondary" disabled>Перехватить</button>
+          <button id="resumeButton" class="warn" disabled>Вернуть AI</button>
+          <button id="replyButton" class="primary" disabled>Отправить ответ</button>
+        </div>
+        <textarea id="replyText" placeholder="Сообщение менеджера клиенту..." disabled></textarea>
+        <div id="statusLine" class="status">Dashboard готов. Обновление списка выполняется автоматически.</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const authToken = new URLSearchParams(window.location.search).get("token") || "";
+    const state = {
+      conversations: [],
+      selectedId: null,
+      detail: null,
+    };
+
+    const el = {
+      list: document.getElementById("conversationList"),
+      thread: document.getElementById("threadList"),
+      details: document.getElementById("detailsBody"),
+      title: document.getElementById("contentTitle"),
+      subtitle: document.getElementById("contentSubtitle"),
+      replyText: document.getElementById("replyText"),
+      replyButton: document.getElementById("replyButton"),
+      pauseButton: document.getElementById("pauseButton"),
+      resumeButton: document.getElementById("resumeButton"),
+      status: document.getElementById("statusLine"),
+    };
+
+    function authHeaders(extra = {}) {
+      return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
+    }
+
+    async function apiFetch(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: authHeaders({
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
+      return payload;
+    }
+
+    function modeBadge(mode) {
+      return `<span class="badge mode-${mode === "manager" ? "manager" : "ai"}">${mode}</span>`;
+    }
+
+    function channelBadge(channel) {
+      return `<span class="badge channel">${channel}</span>`;
+    }
+
+    function stageBadge(stage) {
+      return `<span class="badge stage">${stage}</span>`;
+    }
+
+    function renderConversations() {
+      if (!state.conversations.length) {
+        el.list.innerHTML = `<div class="empty">Диалоги пока не появились.</div>`;
+        return;
+      }
+      el.list.innerHTML = state.conversations.map((item) => `
+        <article class="conversation-item ${item.id === state.selectedId ? "active" : ""}" data-id="${item.id}">
+          <div class="item-top">
+            <div class="item-name">${escapeHtml(item.display_name || item.username || `Диалог ${item.id}`)}</div>
+            ${channelBadge(item.channel)}
+          </div>
+          <div class="meta-row" style="margin-top:10px">
+            ${stageBadge(item.stage)}
+            <span class="badge ${item.mode === "manager" ? "mode-manager" : "mode-ai"}">${item.mode}</span>
+          </div>
+          <div class="item-summary">${escapeHtml(item.summary || "Без summary, менеджер может открыть переписку и взять диалог вручную.")}</div>
+        </article>
+      `).join("");
+
+      el.list.querySelectorAll(".conversation-item").forEach((node) => {
+        node.addEventListener("click", () => openConversation(Number(node.dataset.id)));
+      });
+    }
+
+    function renderThread() {
+      const transcript = state.detail?.transcript || [];
+      if (!transcript.length) {
+        el.thread.innerHTML = `<div class="empty">В этом диалоге пока нет истории сообщений.</div>`;
+        return;
+      }
+      el.thread.innerHTML = transcript.map((row) => `
+        <div class="message ${row.sender_role}">
+          <div class="message-meta">${escapeHtml(row.sender_name || row.sender_role || "unknown")} · ${escapeHtml(row.created_at || "")}</div>
+          ${escapeHtml(row.text || "")}
+        </div>
+      `).join("");
+      el.thread.scrollTop = el.thread.scrollHeight;
+    }
+
+    function renderDetails() {
+      const snapshot = state.detail?.snapshot;
+      if (!snapshot) {
+        el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
+        return;
+      }
+      const summary = state.detail.summary || "Пока без сводки.";
+      el.details.innerHTML = `
+        <div class="detail-block">
+          <div class="detail-label">Клиент</div>
+          <div>${escapeHtml(snapshot.display_name || "Без имени")}</div>
+          <div style="color:var(--muted); margin-top:6px">@${escapeHtml(snapshot.username || "-")}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Статус</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            ${channelBadge(snapshot.channel)}
+            ${modeBadge(snapshot.mode)}
+            ${stageBadge(snapshot.stage)}
+          </div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Товары</div>
+          <div>${escapeHtml((snapshot.interested_products || []).join(", ") || "-")}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Теги</div>
+          <div>${escapeHtml((snapshot.tags || []).join(", ") || "-")}</div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Summary</div>
+          <div>${escapeHtml(summary)}</div>
+        </div>
+      `;
+    }
+
+    function renderHeader() {
+      const snapshot = state.detail?.snapshot;
+      if (!snapshot) {
+        el.title.textContent = "Диалог не выбран";
+        el.subtitle.textContent = "Выберите разговор слева, чтобы открыть историю и перехватить инициативу.";
+        return;
+      }
+      el.title.textContent = `${snapshot.display_name || snapshot.username || `Диалог ${snapshot.conversation_id}`}`;
+      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · режим ${snapshot.mode} · стадия ${snapshot.stage}`;
+    }
+
+    function renderComposer() {
+      const snapshot = state.detail?.snapshot;
+      const enabled = Boolean(snapshot);
+      el.replyText.disabled = !enabled;
+      el.replyButton.disabled = !enabled;
+      el.pauseButton.disabled = !enabled || snapshot.mode === "manager";
+      el.resumeButton.disabled = !enabled || snapshot.mode === "ai";
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    async function refreshConversations() {
+      const payload = await apiFetch("/api/conversations?limit=50");
+      state.conversations = payload.items || [];
+      renderConversations();
+    }
+
+    async function openConversation(id) {
+      state.selectedId = id;
+      renderConversations();
+      el.status.textContent = "Открываю диалог...";
+      state.detail = await apiFetch(`/api/conversations/${id}`);
+      renderHeader();
+      renderThread();
+      renderDetails();
+      renderComposer();
+      el.status.textContent = `Открыт диалог [conv:${id}].`;
+    }
+
+    async function postAction(action, body = {}) {
+      if (!state.selectedId) return;
+      el.status.textContent = "Отправляю действие...";
+      await apiFetch(`/api/conversations/${state.selectedId}/${action}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      await openConversation(state.selectedId);
+      await refreshConversations();
+      el.status.textContent = "Действие выполнено.";
+    }
+
+    el.pauseButton.addEventListener("click", () => postAction("pause"));
+    el.resumeButton.addEventListener("click", () => postAction("resume"));
+    el.replyButton.addEventListener("click", async () => {
+      const text = el.replyText.value.trim();
+      if (!text) {
+        el.status.textContent = "Введите текст ответа менеджера.";
+        return;
+      }
+      await postAction("reply", { text, pause_ai: true });
+      el.replyText.value = "";
+    });
+
+    async function boot() {
+      try {
+        await refreshConversations();
+        if (state.conversations.length) {
+          await openConversation(state.selectedId || state.conversations[0].id);
+        }
+      } catch (error) {
+        el.status.textContent = `Ошибка загрузки: ${error.message}`;
+      }
+    }
+
+    setInterval(async () => {
+      try {
+        await refreshConversations();
+        if (state.selectedId) {
+          await openConversation(state.selectedId);
+        }
+      } catch (error) {
+        el.status.textContent = `Ошибка обновления: ${error.message}`;
+      }
+    }, 5000);
+
+    boot();
+  </script>
+</body>
+</html>
