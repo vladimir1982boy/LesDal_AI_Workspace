@@ -172,6 +172,64 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "channel": "max",
             },
         ]
+        self.repo.transition_events = [
+            {
+                "id": 1,
+                "conversation_id": 3,
+                "event_type": "customer_waiting_manager",
+                "created_at": "2026-04-03T10:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 2,
+                "conversation_id": 3,
+                "event_type": "manager_reply",
+                "created_at": "2026-04-03T10:10:00+00:00",
+                "payload": {"text": "Reply 1"},
+            },
+            {
+                "id": 3,
+                "conversation_id": 4,
+                "event_type": "customer_waiting_manager",
+                "created_at": "2026-04-03T11:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 4,
+                "conversation_id": 4,
+                "event_type": "manager_reply",
+                "created_at": "2026-04-03T11:30:00+00:00",
+                "payload": {"text": "Reply 2"},
+            },
+            {
+                "id": 5,
+                "conversation_id": 5,
+                "event_type": "force_claimed_by_supervisor",
+                "created_at": "2026-04-03T09:00:00+00:00",
+                "payload": {"forced": True},
+            },
+            {
+                "id": 6,
+                "conversation_id": 5,
+                "event_type": "status_changed",
+                "created_at": "2026-04-03T09:40:00+00:00",
+                "payload": {"status": "closed"},
+            },
+            {
+                "id": 7,
+                "conversation_id": 6,
+                "event_type": "force_claimed_by_supervisor",
+                "created_at": "2026-04-03T08:00:00+00:00",
+                "payload": {"forced": True},
+            },
+            {
+                "id": 8,
+                "conversation_id": 6,
+                "event_type": "returned_to_ai",
+                "created_at": "2026-04-03T08:20:00+00:00",
+                "payload": {"mode": "ai"},
+            },
+        ]
 
         from unittest import mock
         from datetime import datetime, timezone
@@ -189,6 +247,10 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(summary["ownership_quality"]["manager_without_reply_count"], 1)
         self.assertEqual(summary["ownership_quality"]["forced_closed_count"], 1)
         self.assertEqual(summary["ownership_quality"]["forced_returned_ai_count"], 1)
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_median_minutes"], 20)
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_samples"], 2)
+        self.assertEqual(summary["resolution_speed"]["forced_to_resolution_median_minutes"], 30)
+        self.assertEqual(summary["resolution_speed"]["forced_to_resolution_samples"], 2)
 
 
 class _FakeRepository:
@@ -196,6 +258,7 @@ class _FakeRepository:
         self.snapshot = snapshot
         self.events: list[dict] = []
         self.forced_events: list[dict] = []
+        self.transition_events: list[dict] = []
 
     def ingest_customer_message(self, message: InboundMessage) -> ConversationSnapshot:
         return self.snapshot
@@ -277,6 +340,13 @@ class _FakeRepository:
 
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]:
         return self.events[:limit]
+
+    def list_conversation_events_by_type(self, *, event_types: list[str] | tuple[str, ...], limit: int = 2000) -> list[dict]:
+        normalized = {str(item).strip() for item in event_types if str(item).strip()}
+        return [
+            row for row in self.transition_events
+            if str(row.get("event_type", "")).strip() in normalized
+        ][:limit]
 
     def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]:
         return self.forced_events[:limit]

@@ -130,6 +130,7 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(payload["today_count"], 1)
         self.assertEqual(payload["by_operator"][0]["operator"], "Lead")
         self.assertEqual(payload["ownership_quality"]["waiting_manager_count"], 2)
+        self.assertEqual(payload["resolution_speed"]["waiting_to_first_reply_median_minutes"], 18)
 
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
@@ -213,6 +214,12 @@ class _FakeService:
                 "manager_without_reply_count": 1,
                 "forced_closed_count": 1,
                 "forced_returned_ai_count": 0,
+            },
+            "resolution_speed": {
+                "waiting_to_first_reply_median_minutes": 18,
+                "waiting_to_first_reply_samples": 4,
+                "forced_to_resolution_median_minutes": 42,
+                "forced_to_resolution_samples": 2,
             },
         }
 

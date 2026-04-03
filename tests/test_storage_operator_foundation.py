@@ -138,6 +138,31 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertEqual(event["event_type"], "claimed")
         self.assertEqual(event["actor"], "manager")
 
+    def test_sqlite_can_filter_conversation_events_by_type(self) -> None:
+        repo = SQLiteLeadRepository(self.sqlite_path)
+        snapshot = self._ingest(repo)
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="customer_waiting_manager",
+            actor="system",
+            payload={"status": "waiting_manager"},
+        )
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="manager_reply",
+            actor="manager",
+            payload={"text": "Handled"},
+        )
+
+        rows = repo.list_conversation_events_by_type(
+            event_types=("customer_waiting_manager", "manager_reply"),
+            limit=10,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(dict(rows[0])["event_type"], "customer_waiting_manager")
+        self.assertEqual(dict(rows[1])["event_type"], "manager_reply")
+
     def test_sqlite_recent_conversations_include_forced_takeover_audit(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)
         snapshot = self._ingest(repo)
@@ -172,6 +197,31 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         event = rows[0]
         self.assertEqual(event["event_type"], "claimed")
         self.assertEqual(event["actor"], "manager")
+
+    def test_json_can_filter_conversation_events_by_type(self) -> None:
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = self._ingest(repo)
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="customer_waiting_manager",
+            actor="system",
+            payload={"status": "waiting_manager"},
+        )
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="manager_reply",
+            actor="manager",
+            payload={"text": "Handled"},
+        )
+
+        rows = repo.list_conversation_events_by_type(
+            event_types=("customer_waiting_manager", "manager_reply"),
+            limit=10,
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["event_type"], "customer_waiting_manager")
+        self.assertEqual(rows[1]["event_type"], "manager_reply")
 
     def test_json_recent_conversations_include_forced_takeover_audit(self) -> None:
         repo = JSONLeadRepository(self.json_path)

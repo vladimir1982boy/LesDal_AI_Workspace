@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from statistics import median
 from typing import Protocol
 import json
 
@@ -27,11 +28,84 @@ class RepositoryProtocol(Protocol):
     def get_conversation_target(self, conversation_id: int) -> dict: ...
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]: ...
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]: ...
+    def list_conversation_events_by_type(self, *, event_types: list[str] | tuple[str, ...], limit: int = 2000) -> list[dict]: ...
     def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]: ...
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None: ...
     def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_id: str | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
     def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, priority: LeadPriority | None = None, follow_up_date: str | None = None, next_action: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]: ...
+
+
+def _parse_event_time(raw_value: object) -> datetime | None:
+    if not raw_value:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw_value))
+    except ValueError:
+        return None
+
+
+def _coerce_event_payload(raw_payload: object) -> dict:
+    if isinstance(raw_payload, dict):
+        return raw_payload
+    if isinstance(raw_payload, str):
+        try:
+            decoded = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+    return {}
+
+
+def _median_minutes(samples: list[int]) -> int | float | None:
+    if not samples:
+        return None
+    value = median(samples)
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return round(float(value), 1)
+
+
+def _collect_resolution_minutes(
+    events: list[dict],
+    *,
+    start_types: set[str],
+    finish_types: set[str] | None = None,
+    finish_matcher=None,
+) -> list[int]:
+    durations: list[int] = []
+    pending_started_at: dict[int, datetime] = {}
+    ordered = sorted(
+        events,
+        key=lambda row: (
+            int(row.get("conversation_id") or 0),
+            int(row.get("id") or 0),
+        ),
+    )
+    for row in ordered:
+        conversation_id = int(row.get("conversation_id") or 0)
+        event_type = str(row.get("event_type") or "").strip()
+        created_at = _parse_event_time(row.get("created_at"))
+        if not conversation_id or not event_type or created_at is None:
+            continue
+        if event_type in start_types:
+            pending_started_at[conversation_id] = created_at
+            continue
+        started_at = pending_started_at.get(conversation_id)
+        if started_at is None:
+            continue
+        is_finish = False
+        if finish_types and event_type in finish_types:
+            is_finish = True
+        elif callable(finish_matcher):
+            is_finish = bool(finish_matcher(row))
+        if not is_finish:
+            continue
+        delta_minutes = int((created_at - started_at).total_seconds() // 60)
+        if delta_minutes >= 0:
+            durations.append(delta_minutes)
+        pending_started_at.pop(conversation_id, None)
+    return durations
 
 
 class SalesBotService:
@@ -444,6 +518,19 @@ class SalesBotService:
         rows = self.repository.list_forced_takeover_events(limit=limit)
         events = [dict(row) for row in rows]
         current_rows = [dict(row) for row in self.repository.list_recent_conversations(limit=1000)]
+        transition_rows = [
+            dict(row)
+            for row in self.repository.list_conversation_events_by_type(
+                event_types=(
+                    "customer_waiting_manager",
+                    "manager_reply",
+                    "force_claimed_by_supervisor",
+                    "returned_to_ai",
+                    "status_changed",
+                ),
+                limit=5000,
+            )
+        ]
         now = _utcnow()
         today = now.date()
         week_start = now.date().fromordinal(today.toordinal() - today.weekday())
@@ -511,6 +598,26 @@ class SalesBotService:
                 and str(row.get("mode") or "") == ConversationMode.AI.value
             ),
         }
+        waiting_to_reply_minutes = _collect_resolution_minutes(
+            transition_rows,
+            start_types={"customer_waiting_manager"},
+            finish_types={"manager_reply"},
+        )
+        forced_to_resolution_minutes = _collect_resolution_minutes(
+            transition_rows,
+            start_types={"force_claimed_by_supervisor"},
+            finish_types={"returned_to_ai"},
+            finish_matcher=lambda row: (
+                str(row.get("event_type") or "") == "status_changed"
+                and _coerce_event_payload(row.get("payload")).get("status") == ConversationStatus.CLOSED.value
+            ),
+        )
+        resolution_speed = {
+            "waiting_to_first_reply_median_minutes": _median_minutes(waiting_to_reply_minutes),
+            "waiting_to_first_reply_samples": len(waiting_to_reply_minutes),
+            "forced_to_resolution_median_minutes": _median_minutes(forced_to_resolution_minutes),
+            "forced_to_resolution_samples": len(forced_to_resolution_minutes),
+        }
         return {
             "today_count": today_count,
             "week_count": week_count,
@@ -518,4 +625,5 @@ class SalesBotService:
             "by_operator": by_operator_items,
             "recent": recent[:8],
             "ownership_quality": ownership_quality,
+            "resolution_speed": resolution_speed,
         }

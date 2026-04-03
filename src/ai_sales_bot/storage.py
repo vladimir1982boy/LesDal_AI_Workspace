@@ -831,6 +831,28 @@ class SQLiteLeadRepository:
                 (conversation_id, limit),
             ).fetchall()
 
+    def list_conversation_events_by_type(
+        self,
+        *,
+        event_types: list[str] | tuple[str, ...],
+        limit: int = 2000,
+    ) -> list[sqlite3.Row]:
+        normalized = [str(item).strip() for item in event_types if str(item).strip()]
+        if not normalized:
+            return []
+        placeholders = ", ".join("?" for _ in normalized)
+        with self._connect() as conn:
+            return conn.execute(
+                f"""
+                SELECT id, conversation_id, event_type, actor, payload, created_at
+                FROM conversation_events
+                WHERE event_type IN ({placeholders})
+                ORDER BY conversation_id ASC, id ASC
+                LIMIT ?
+                """,
+                (*normalized, limit),
+            ).fetchall()
+
     def list_forced_takeover_events(self, *, limit: int = 200) -> list[sqlite3.Row]:
         with self._connect() as conn:
             return conn.execute(
@@ -1397,6 +1419,24 @@ class JSONLeadRepository:
             if int(row["conversation_id"]) == conversation_id
         ]
         rows.sort(key=lambda item: int(item["id"]), reverse=True)
+        return rows[:limit]
+
+    def list_conversation_events_by_type(
+        self,
+        *,
+        event_types: list[str] | tuple[str, ...],
+        limit: int = 2000,
+    ) -> list[dict]:
+        data = self._load()
+        normalized = {str(item).strip() for item in event_types if str(item).strip()}
+        if not normalized:
+            return []
+        rows = [
+            row
+            for row in data["conversation_events"]
+            if str(row.get("event_type", "")).strip() in normalized
+        ]
+        rows.sort(key=lambda item: (int(item["conversation_id"]), int(item["id"])))
         return rows[:limit]
 
     def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]:

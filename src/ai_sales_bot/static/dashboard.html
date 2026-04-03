@@ -1038,6 +1038,20 @@
       });
     }
 
+    function formatResolutionMinutes(value) {
+      if (value === null || value === undefined || value === "") {
+        return "—";
+      }
+      const minutes = Math.round(Number(value));
+      if (!Number.isFinite(minutes)) {
+        return "—";
+      }
+      if (minutes <= 0) {
+        return "< 1 мин";
+      }
+      return humanElapsed(minutes);
+    }
+
     function slaSnapshot(item) {
       const waitingAt = item.last_customer_message_at || item.last_message_at;
       const managerAt = item.last_manager_message_at || item.last_message_at;
@@ -1449,6 +1463,7 @@
       const byOperator = summary.by_operator || [];
       const recent = summary.recent || [];
       const quality = summary.ownership_quality || {};
+      const speed = summary.resolution_speed || {};
       return `
         <section class="audit-board">
           <div class="queue-title">
@@ -1493,6 +1508,24 @@
               <div style="color:var(--muted);">Ownership Quality</div>
               <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
                 Видно, сколько кейсов застряло в человеческом ownership и чем заканчиваются forced takeover-сценарии.
+              </div>
+            </div>
+          </div>
+          <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Waiting → первый reply</div>
+              <strong>${formatResolutionMinutes(speed.waiting_to_first_reply_median_minutes)}</strong>
+              <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
+                Медиана времени от waiting_manager до первого ответа менеджера.
+                Выборка: ${speed.waiting_to_first_reply_samples || 0}
+              </div>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced → resolution</div>
+              <strong>${formatResolutionMinutes(speed.forced_to_resolution_median_minutes)}</strong>
+              <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
+                Медиана времени от forced takeover до closed или возврата AI.
+                Выборка: ${speed.forced_to_resolution_samples || 0}
               </div>
             </div>
           </div>
