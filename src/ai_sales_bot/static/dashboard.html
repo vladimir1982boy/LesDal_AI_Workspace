@@ -545,6 +545,36 @@
       color: var(--danger);
       font-weight: 700;
     }
+    .composer-alert {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .composer-alert[hidden] {
+      display: none;
+    }
+    .composer-alert.error {
+      border-color: #dcae9d;
+      background: #fff1eb;
+      color: #8a3a26;
+    }
+    .composer-alert.warning {
+      border-color: #e2c786;
+      background: #fff8e4;
+      color: #7d5c1e;
+    }
+    .composer-alert.info {
+      border-color: #b8d5c5;
+      background: #eff8f2;
+      color: #2f6b52;
+    }
     .empty {
       display: grid;
       place-items: center;
@@ -672,6 +702,10 @@
           <button id="statusButton" class="ghost" disabled>Обновить статус</button>
         </div>
         <textarea id="replyText" placeholder="Сообщение менеджера клиенту..." disabled></textarea>
+        <div id="composerAlert" class="composer-alert" hidden>
+          <span id="composerAlertText"></span>
+          <button id="retryReplyButton" class="ghost" hidden>Повторить отправку</button>
+        </div>
         <div id="statusLine" class="status">Dashboard готов. Список обновляется автоматически.</div>
       </div>
     </main>
@@ -704,6 +738,7 @@
       lastWaitingIds: [],
       audioContextReady: false,
       audioContext: null,
+      currentRetryDeliveryKey: "",
     };
 
     const el = {
@@ -720,6 +755,9 @@
       statusSelect: document.getElementById("statusSelect"),
       statusButton: document.getElementById("statusButton"),
       status: document.getElementById("statusLine"),
+      composerAlert: document.getElementById("composerAlert"),
+      composerAlertText: document.getElementById("composerAlertText"),
+      retryReplyButton: document.getElementById("retryReplyButton"),
       operatorSelect: document.getElementById("operatorSelect"),
       operatorPin: document.getElementById("operatorPin"),
       loginButton: document.getElementById("loginButton"),
@@ -876,8 +914,7 @@
       const operatorId = el.operatorSelect.value;
       const pin = el.operatorPin.value.trim();
       if (!operatorId) {
-        el.status.textContent = "Выберите оператора для входа.";
-        el.status.classList.add("alert");
+        setStatusMessage("Выберите оператора для входа.", "error");
         return false;
       }
       const payload = await apiFetch("/api/auth/login", {
@@ -894,8 +931,7 @@
       localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
       el.operatorPin.value = "";
       renderAuthState();
-      el.status.textContent = `Вошли как ${currentOperator()}.`;
-      el.status.classList.remove("alert");
+      setStatusMessage(`Вошли как ${currentOperator()}.`, "info");
       return true;
     }
 
@@ -909,8 +945,7 @@
       state.operator = null;
       localStorage.removeItem(operatorSessionStorageKey);
       renderAuthState();
-      el.status.textContent = "Операторская сессия завершена.";
-      el.status.classList.remove("alert");
+      setStatusMessage("Операторская сессия завершена.", "info");
     }
 
     function effectiveOwnerFilter() {
@@ -952,9 +987,181 @@
         }
         const error = new Error(payload.error || `HTTP ${response.status}`);
         error.status = response.status;
+        error.reason = payload.reason || "";
+        error.payload = payload;
         throw error;
       }
       return payload;
+    }
+
+    function setStatusMessage(text, tone = "info") {
+      el.status.textContent = text;
+      el.status.classList.toggle("alert", tone === "error");
+    }
+
+    function showComposerAlert(message, tone = "info", retry = null) {
+      state.currentRetryDeliveryKey = retry?.deliveryKey || "";
+      el.composerAlert.hidden = false;
+      el.composerAlert.className = `composer-alert ${tone}`;
+      el.composerAlertText.textContent = message;
+      const canRetry = Boolean(retry?.available && retry?.deliveryKey);
+      el.retryReplyButton.hidden = !canRetry;
+      el.retryReplyButton.disabled = !canRetry;
+    }
+
+    function hideComposerAlert() {
+      state.currentRetryDeliveryKey = "";
+      el.composerAlert.hidden = true;
+      el.composerAlert.className = "composer-alert";
+      el.composerAlertText.textContent = "";
+      el.retryReplyButton.hidden = true;
+      el.retryReplyButton.disabled = true;
+    }
+
+    function payloadObject(value) {
+      if (!value) return {};
+      if (typeof value === "string") {
+        try {
+          const decoded = JSON.parse(value);
+          return decoded && typeof decoded === "object" ? decoded : {};
+        } catch (error) {
+          return {};
+        }
+      }
+      return value;
+    }
+
+    function latestReplyDeliveryIssue(events) {
+      const deliveredKeys = new Set();
+      (events || []).forEach((row) => {
+        if ((row.event_type || "") !== "reply_send_succeeded") {
+          return;
+        }
+        const payload = payloadObject(row.payload);
+        const key = String(payload.delivery_key || "").trim();
+        if (key) {
+          deliveredKeys.add(key);
+        }
+      });
+      for (const row of (events || [])) {
+        if ((row.event_type || "") !== "reply_send_failed") {
+          continue;
+        }
+        const payload = payloadObject(row.payload);
+        const deliveryKey = String(payload.delivery_key || "").trim();
+        if (!deliveryKey || deliveredKeys.has(deliveryKey)) {
+          continue;
+        }
+        return {
+          deliveryKey,
+          channel: String(payload.channel || ""),
+          error: String(payload.error || "Сообщение не доставлено"),
+          retryable: Boolean(payload.retryable),
+          createdAt: row.created_at || "",
+        };
+      }
+      return null;
+    }
+
+    function latestOwnershipExpiry(events) {
+      return (events || []).find((row) => (row.event_type || "") === "lock_expired") || null;
+    }
+
+    function describeApiError(error) {
+      if (error?.reason === "session_expired" || error?.status === 401) {
+        return {
+          text: "Сессия оператора истекла. Войдите снова, чтобы продолжить работу.",
+          tone: "error",
+          kind: "session",
+        };
+      }
+      if (error?.reason === "ownership_expired") {
+        return {
+          text: "Ownership истёк. Обновите карточку и возьмите диалог заново.",
+          tone: "warning",
+          kind: "ownership_expired",
+        };
+      }
+      if (error?.status === 409) {
+        return {
+          text: `Конфликт владельца: ${error.message}`,
+          tone: "error",
+          kind: "ownership_conflict",
+        };
+      }
+      if (error?.status === 403) {
+        return {
+          text: `Недостаточно прав: ${error.message}`,
+          tone: "error",
+          kind: "forbidden",
+        };
+      }
+      if (error?.status >= 500) {
+        return {
+          text: `Ошибка сервера: ${error.message}`,
+          tone: "error",
+          kind: "server",
+        };
+      }
+      return {
+        text: error?.message || "Неизвестная ошибка.",
+        tone: "error",
+        kind: "generic",
+      };
+    }
+
+    function applyActionFeedback(action, payload) {
+      const outbound = payload?.outbound || null;
+      const retry = payload?.retry || null;
+      if (action === "retry-reply") {
+        if (outbound?.ok) {
+          hideComposerAlert();
+          setStatusMessage("Сообщение повторно отправлено в канал.", "info");
+          return;
+        }
+        if (outbound) {
+          showComposerAlert(
+            `Повторная отправка не удалась: ${outbound.channel || "канал"} · ${outbound.error || "без текста ошибки"}`,
+            "error",
+            {
+              available: Boolean(retry?.available && outbound.retryable),
+              deliveryKey: retry?.delivery_key || "",
+            },
+          );
+          setStatusMessage("Повторная отправка не удалась. Сообщение осталось сохранённым в диалоге.", "error");
+          return;
+        }
+      }
+      if (action === "reply" && outbound && !outbound.ok) {
+        showComposerAlert(
+          `Сообщение сохранено, но не доставлено в ${outbound.channel || "канал"}: ${outbound.error || "без текста ошибки"}`,
+          "error",
+          {
+            available: Boolean(retry?.available && outbound.retryable),
+            deliveryKey: retry?.delivery_key || "",
+          },
+        );
+        setStatusMessage("Ответ менеджера сохранён, но доставка в канал не удалась.", "error");
+        return;
+      }
+      if (action === "resume" && outbound && !outbound.ok) {
+        showComposerAlert(
+          `Клиент не получил уведомление о возврате AI: ${outbound.error || "без текста ошибки"}`,
+          "warning",
+          {
+            available: false,
+            deliveryKey: "",
+          },
+        );
+        setStatusMessage("Диалог возвращён AI, но уведомление клиенту не ушло.", "error");
+        return;
+      }
+      hideComposerAlert();
+      if (action === "reply" && outbound?.ok) {
+        setStatusMessage("Ответ менеджера отправлен клиенту.", "info");
+        return;
+      }
+      setStatusMessage("Действие выполнено.", "info");
     }
 
     function modeBadge(mode) {
@@ -1321,13 +1528,12 @@
       }
       if (!newAlerts.length) {
         if (state.alertingUntil <= Date.now()) {
-          el.status.classList.remove("alert");
+          setStatusMessage(el.status.textContent || "Dashboard готов. Список обновляется автоматически.", "info");
         }
         return;
       }
       state.alertingUntil = Date.now() + 25000;
-      el.status.textContent = `Новые диалоги ждут менеджера: ${newAlerts.length}.`;
-      el.status.classList.add("alert");
+      setStatusMessage(`Новые диалоги ждут менеджера: ${newAlerts.length}.`, "error");
       await playAlertSound();
       await triggerBrowserNotification(newAlerts);
       renderConversations();
@@ -1804,14 +2010,24 @@
     }
 
     function eventPayload(row) {
-      const payload = row.payload;
+      const payload = payloadObject(row.payload);
       if (!payload) return "";
-      if (typeof payload === "string") {
-        return payload;
-      }
       if (row.event_type === "force_claimed_by_supervisor") {
         const previousOwner = payload.previous_owner_name || payload.previous_owner_id || "неизвестно";
         return `forced takeover · предыдущий владелец: ${previousOwner}`;
+      }
+      if (row.event_type === "lock_expired") {
+        const previousOwner = payload.previous_owner_name || payload.previous_owner_id || "неизвестный владелец";
+        return `ownership expired · прошлый владелец: ${previousOwner}`;
+      }
+      if (row.event_type === "reply_send_failed") {
+        return `delivery failed · ${payload.channel || "channel"} · ${payload.error || "без текста ошибки"}`;
+      }
+      if (row.event_type === "reply_send_retried") {
+        return `retry requested · ${payload.channel || "channel"} · delivery_key=${payload.delivery_key || "-"}`;
+      }
+      if (row.event_type === "reply_send_succeeded") {
+        return `delivery succeeded · ${payload.channel || "channel"}${payload.message_id ? ` · message_id=${payload.message_id}` : ""}`;
       }
       if (payload.text) return payload.text;
       if (payload.status) return `status=${payload.status}`;
@@ -1838,6 +2054,8 @@
       const snapshot = state.detail?.snapshot;
       const events = state.detail?.events || [];
       const replyTemplates = state.detail?.reply_templates || [];
+      const deliveryIssue = latestReplyDeliveryIssue(events);
+      const ownershipExpiry = latestOwnershipExpiry(events);
       const leadStages = [
         "new",
         "qualified",
@@ -1902,6 +2120,25 @@
           <div>${escapeHtml(managerSummary)}</div>
         </div>
         <div class="detail-block">
+          <div class="detail-label">Delivery Health</div>
+          ${deliveryIssue ? `
+            <div style="color:var(--danger); font-weight:700;">Последняя отправка не доставлена</div>
+            <div style="margin-top:6px; font-size:13px; line-height:1.45;">
+              ${escapeHtml(deliveryIssue.channel || "channel")} · ${escapeHtml(deliveryIssue.error || "без текста ошибки")}
+            </div>
+            <div style="margin-top:6px; font-size:12px; color:var(--muted);">
+              ${escapeHtml(formatDateTime(deliveryIssue.createdAt))}${deliveryIssue.retryable ? " · доступен retry" : " · retry недоступен"}
+            </div>
+          ` : `
+            <div style="font-size:13px; color:var(--muted); line-height:1.45;">Последняя доставка выглядит стабильной. Ошибок outbound по текущему reply не найдено.</div>
+          `}
+          ${ownershipExpiry ? `
+            <div style="margin-top:10px; font-size:12px; color:var(--muted); line-height:1.45;">
+              Ownership истекал: ${escapeHtml(eventPayload(ownershipExpiry))} · ${escapeHtml(formatDateTime(ownershipExpiry.created_at))}
+            </div>
+          ` : ""}
+        </div>
+        <div class="detail-block">
           <div class="detail-label">Заметки менеджера</div>
           <textarea id="managerNotesInput" class="manager-notes" placeholder="Короткие внутренние заметки по лиду, договорённостям и следующему шагу..."></textarea>
           <div class="inline-actions">
@@ -1922,7 +2159,17 @@
           <div class="detail-label">Журнал событий</div>
           <div class="event-list">
             ${events.length ? events.map((row) => `
-              <div class="event-row" style="${row.event_type === 'force_claimed_by_supervisor' ? 'border-color:#dcae9d;background:#fff1eb;' : ''}">
+              <div class="event-row" style="${
+                row.event_type === 'force_claimed_by_supervisor'
+                  ? 'border-color:#dcae9d;background:#fff1eb;'
+                  : row.event_type === 'reply_send_failed'
+                    ? 'border-color:#dcae9d;background:#fff1eb;'
+                    : row.event_type === 'reply_send_retried'
+                      ? 'border-color:#e2c786;background:#fff8e4;'
+                      : row.event_type === 'lock_expired'
+                        ? 'border-color:#b8d5c5;background:#eff8f2;'
+                        : ''
+              }">
                 <div><strong>${escapeHtml(row.event_type || 'event')}</strong></div>
                 <div style="color:var(--muted); margin-top:4px;">${escapeHtml(row.actor || '-')} · ${escapeHtml(row.created_at || '')}</div>
                 ${eventPayload(row) ? `<div style="margin-top:6px;">${escapeHtml(eventPayload(row))}</div>` : ''}
@@ -1946,14 +2193,12 @@
           const followUpDate = leadFollowUpInput.value.trim();
           const nextAction = leadNextActionInput.value.trim();
           if ((priority === "high" || priority === "urgent") && !nextAction) {
-            el.status.textContent = "Для high/urgent priority заполните поле next action.";
-            el.status.classList.add("alert");
+            setStatusMessage("Для high/urgent priority заполните поле next action.", "error");
             leadNextActionInput.focus();
             return;
           }
           if (followUpDate && !/^\d{4}-\d{2}-\d{2}$/.test(followUpDate)) {
-            el.status.textContent = "Дата follow-up должна быть в формате YYYY-MM-DD.";
-            el.status.classList.add("alert");
+            setStatusMessage("Дата follow-up должна быть в формате YYYY-MM-DD.", "error");
             leadFollowUpInput.focus();
             return;
           }
@@ -1986,8 +2231,7 @@
           const text = node.dataset.text || "";
           el.replyText.value = text;
           el.replyText.focus();
-          el.status.textContent = "Шаблон подставлен в ответ менеджера.";
-          el.status.classList.remove("alert");
+          setStatusMessage("Шаблон подставлен в ответ менеджера.", "info");
         });
       });
     }
@@ -2010,6 +2254,9 @@
 
     function renderComposer() {
       const snapshot = state.detail?.snapshot;
+      const events = state.detail?.events || [];
+      const deliveryIssue = latestReplyDeliveryIssue(events);
+      const ownershipExpiry = latestOwnershipExpiry(events);
       const enabled = Boolean(snapshot && state.operator);
       const operatorId = currentOperatorId();
       const operator = currentOperator();
@@ -2039,6 +2286,29 @@
       if (snapshot) {
         el.statusSelect.value = snapshot.status || "new";
       }
+      if (deliveryIssue) {
+        showComposerAlert(
+          `Сообщение не доставлено в ${deliveryIssue.channel || "канал"}: ${deliveryIssue.error || "без текста ошибки"}`,
+          "error",
+          {
+            available: !ownedByOther && Boolean(deliveryIssue.retryable),
+            deliveryKey: deliveryIssue.deliveryKey,
+          },
+        );
+        return;
+      }
+      if (ownershipExpiry) {
+        showComposerAlert(
+          "Предыдущее ownership истекло. Диалог снова доступен для захвата и ответа менеджера.",
+          "info",
+          {
+            available: false,
+            deliveryKey: "",
+          },
+        );
+        return;
+      }
+      hideComposerAlert();
     }
 
     function escapeHtml(value) {
@@ -2080,8 +2350,7 @@
       if (!state.operator || !metric || !operatorKey) {
         return;
       }
-      el.status.textContent = "Открываю supervisor drill-down...";
-      el.status.classList.remove("alert");
+      setStatusMessage("Открываю supervisor drill-down...", "info");
       state.auditDrilldown = await apiFetch(
         `/api/audit/resolution-drilldown?metric=${encodeURIComponent(metric)}&operator=${encodeURIComponent(operatorKey)}&period=${encodeURIComponent(state.auditPeriod || "30d")}`
       );
@@ -2089,8 +2358,7 @@
         state.auditDrilldown.operator = operatorLabel;
       }
       renderConversations();
-      el.status.textContent = "Supervisor drill-down загружен.";
-      el.status.classList.remove("alert");
+      setStatusMessage("Supervisor drill-down загружен.", "info");
     }
 
     async function openConversation(id) {
@@ -2100,42 +2368,40 @@
       state.selectedId = id;
       persistView();
       renderConversations();
-      el.status.textContent = "Открываю диалог...";
-      el.status.classList.remove("alert");
+      setStatusMessage("Открываю диалог...", "info");
       state.detail = await apiFetch(`/api/conversations/${id}`);
       renderHeader();
       renderThread();
       renderDetails();
       renderComposer();
-      el.status.textContent = `Открыт диалог [conv:${id}].`;
-      el.status.classList.remove("alert");
+      setStatusMessage(`Открыт диалог [conv:${id}].`, "info");
     }
 
     async function postConversationAction(conversationId, action, body = {}) {
       if (!state.operator) {
-        el.status.textContent = "Сначала войдите как оператор.";
-        el.status.classList.add("alert");
+        setStatusMessage("Сначала войдите как оператор.", "error");
         return false;
       }
-      el.status.textContent = "Отправляю действие...";
-      el.status.classList.remove("alert");
+      setStatusMessage("Отправляю действие...", "info");
+      let payload = null;
       try {
-        await apiFetch(`/api/conversations/${conversationId}/${action}`, {
+        payload = await apiFetch(`/api/conversations/${conversationId}/${action}`, {
           method: "POST",
           body: JSON.stringify(body),
         });
       } catch (error) {
-        if (error.status === 409) {
-          el.status.textContent = `Конфликт владельца: ${error.message}`;
-          if (state.selectedId) {
-            await openConversation(state.selectedId);
-          }
-          await refreshConversations();
+        const details = describeApiError(error);
+        setStatusMessage(details.text, details.tone);
+        if (details.kind === "session") {
+          hideComposerAlert();
+          state.detail = null;
+          renderHeader();
+          renderThread();
+          renderDetails();
+          renderComposer();
           return false;
         }
-        if (error.status === 403) {
-          el.status.textContent = `Недостаточно прав: ${error.message}`;
-          el.status.classList.add("alert");
+        if (error.status === 409 || error.status === 403) {
           await refreshConversations();
           if (state.selectedId) {
             await openConversation(state.selectedId);
@@ -2146,9 +2412,8 @@
       }
       await refreshConversations();
       await openConversation(conversationId);
-      el.status.textContent = "Действие выполнено.";
-      el.status.classList.remove("alert");
-      return true;
+      applyActionFeedback(action, payload);
+      return payload;
     }
 
     async function postAction(action, body = {}) {
@@ -2218,8 +2483,7 @@
           await applyFilters();
         }
       } catch (error) {
-        el.status.textContent = `Ошибка входа: ${error.message}`;
-        el.status.classList.add("alert");
+        setStatusMessage(`Ошибка входа: ${error.message}`, "error");
       }
     });
     el.loginButton.addEventListener("click", async () => {
@@ -2229,8 +2493,7 @@
           await applyFilters();
         }
       } catch (error) {
-        el.status.textContent = `Ошибка входа: ${error.message}`;
-        el.status.classList.add("alert");
+        setStatusMessage(`Ошибка входа: ${error.message}`, "error");
       }
     });
     el.logoutButton.addEventListener("click", async () => {
@@ -2321,10 +2584,16 @@
     el.releaseButton.addEventListener("click", () => postAction("release"));
     el.resumeButton.addEventListener("click", () => postAction("resume"));
     el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value }));
+    el.retryReplyButton.addEventListener("click", async () => {
+      if (!state.currentRetryDeliveryKey) {
+        return;
+      }
+      await postAction("retry-reply", { delivery_key: state.currentRetryDeliveryKey });
+    });
     el.replyButton.addEventListener("click", async () => {
       const text = el.replyText.value.trim();
       if (!text) {
-        el.status.textContent = "Введите текст ответа менеджера.";
+        setStatusMessage("Введите текст ответа менеджера.", "error");
         return;
       }
       await postAction("reply", { text, pause_ai: true });
@@ -2345,12 +2614,10 @@
         if (restored) {
           await applyFilters();
         } else {
-          el.status.textContent = "Авторизуйтесь как оператор, чтобы открыть inbox.";
-          el.status.classList.remove("alert");
+          setStatusMessage("Авторизуйтесь как оператор, чтобы открыть inbox.", "info");
         }
       } catch (error) {
-        el.status.textContent = `Ошибка загрузки: ${error.message}`;
-        el.status.classList.add("alert");
+        setStatusMessage(`Ошибка загрузки: ${error.message}`, "error");
       }
     }
 
@@ -2364,8 +2631,7 @@
           await openConversation(state.selectedId);
         }
       } catch (error) {
-        el.status.textContent = `Ошибка обновления: ${error.message}`;
-        el.status.classList.add("alert");
+        setStatusMessage(`Ошибка обновления: ${describeApiError(error).text}`, "error");
       }
     }, 5000);
 
