@@ -1448,6 +1448,7 @@
       }
       const byOperator = summary.by_operator || [];
       const recent = summary.recent || [];
+      const quality = summary.ownership_quality || {};
       return `
         <section class="audit-board">
           <div class="queue-title">
@@ -1467,6 +1468,32 @@
             <div class="audit-metric">
               <div style="color:var(--muted);">Всего в ленте</div>
               <strong>${summary.total_count || 0}</strong>
+            </div>
+          </div>
+          <div class="audit-grid">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Ждут менеджера</div>
+              <strong>${quality.waiting_manager_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">У менеджера без ответа</div>
+              <strong>${quality.manager_without_reply_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced → закрыто</div>
+              <strong>${quality.forced_closed_count || 0}</strong>
+            </div>
+          </div>
+          <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced → возврат AI</div>
+              <strong>${quality.forced_returned_ai_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Ownership Quality</div>
+              <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
+                Видно, сколько кейсов застряло в человеческом ownership и чем заканчиваются forced takeover-сценарии.
+              </div>
             </div>
           </div>
           <div class="audit-grid" style="grid-template-columns: 1.2fr 1fr;">

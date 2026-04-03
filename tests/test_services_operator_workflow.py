@@ -185,6 +185,10 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(summary["by_operator"][0]["operator"], "Lead")
         self.assertEqual(summary["by_operator"][0]["count"], 2)
         self.assertEqual(summary["recent"][0]["actor"], "Lead")
+        self.assertEqual(summary["ownership_quality"]["waiting_manager_count"], 1)
+        self.assertEqual(summary["ownership_quality"]["manager_without_reply_count"], 1)
+        self.assertEqual(summary["ownership_quality"]["forced_closed_count"], 1)
+        self.assertEqual(summary["ownership_quality"]["forced_returned_ai_count"], 1)
 
 
 class _FakeRepository:
@@ -232,7 +236,44 @@ class _FakeRepository:
         return {}
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
-        return []
+        return [
+            {
+                "id": 3,
+                "mode": "manager",
+                "status": "waiting_manager",
+                "owner_id": "alice",
+                "owner_name": "Alice",
+                "last_manager_message_at": None,
+                "has_forced_takeover": False,
+            },
+            {
+                "id": 4,
+                "mode": "manager",
+                "status": "in_progress",
+                "owner_id": "bob",
+                "owner_name": "Bob",
+                "last_manager_message_at": None,
+                "has_forced_takeover": False,
+            },
+            {
+                "id": 5,
+                "mode": "manager",
+                "status": "closed",
+                "owner_id": "lead",
+                "owner_name": "Lead",
+                "last_manager_message_at": "2026-04-03T09:00:00+00:00",
+                "has_forced_takeover": True,
+            },
+            {
+                "id": 6,
+                "mode": "ai",
+                "status": "new",
+                "owner_id": "",
+                "owner_name": "",
+                "last_manager_message_at": "2026-04-03T08:00:00+00:00",
+                "has_forced_takeover": True,
+            },
+        ][:limit]
 
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]:
         return self.events[:limit]

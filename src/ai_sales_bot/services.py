@@ -443,6 +443,7 @@ class SalesBotService:
     def get_forced_takeover_summary(self, *, limit: int = 200) -> dict:
         rows = self.repository.list_forced_takeover_events(limit=limit)
         events = [dict(row) for row in rows]
+        current_rows = [dict(row) for row in self.repository.list_recent_conversations(limit=1000)]
         now = _utcnow()
         today = now.date()
         week_start = now.date().fromordinal(today.toordinal() - today.weekday())
@@ -487,10 +488,34 @@ class SalesBotService:
             {"operator": operator, "count": count}
             for operator, count in sorted(by_operator.items(), key=lambda item: (-item[1], item[0]))
         ]
+        ownership_quality = {
+            "waiting_manager_count": sum(
+                1 for row in current_rows
+                if str(row.get("status") or "") == ConversationStatus.WAITING_MANAGER.value
+            ),
+            "manager_without_reply_count": sum(
+                1 for row in current_rows
+                if str(row.get("mode") or "") == ConversationMode.MANAGER.value
+                and str(row.get("status") or "") == ConversationStatus.IN_PROGRESS.value
+                and (str(row.get("owner_id") or "").strip() or str(row.get("owner_name") or "").strip())
+                and not row.get("last_manager_message_at")
+            ),
+            "forced_closed_count": sum(
+                1 for row in current_rows
+                if bool(row.get("has_forced_takeover", False))
+                and str(row.get("status") or "") == ConversationStatus.CLOSED.value
+            ),
+            "forced_returned_ai_count": sum(
+                1 for row in current_rows
+                if bool(row.get("has_forced_takeover", False))
+                and str(row.get("mode") or "") == ConversationMode.AI.value
+            ),
+        }
         return {
             "today_count": today_count,
             "week_count": week_count,
             "total_count": len(events),
             "by_operator": by_operator_items,
             "recent": recent[:8],
+            "ownership_quality": ownership_quality,
         }

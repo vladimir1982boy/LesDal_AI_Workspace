@@ -129,6 +129,7 @@ class OperatorInboxAPITests(unittest.TestCase):
 
         self.assertEqual(payload["today_count"], 1)
         self.assertEqual(payload["by_operator"][0]["operator"], "Lead")
+        self.assertEqual(payload["ownership_quality"]["waiting_manager_count"], 2)
 
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
@@ -207,6 +208,12 @@ class _FakeService:
             "total_count": 2,
             "by_operator": [{"operator": "Lead", "count": 2}],
             "recent": [],
+            "ownership_quality": {
+                "waiting_manager_count": 2,
+                "manager_without_reply_count": 1,
+                "forced_closed_count": 1,
+                "forced_returned_ai_count": 0,
+            },
         }
 
     def build_manager_summary(self, *, conversation_id: int, limit: int = 12) -> str:
