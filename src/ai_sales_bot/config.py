@@ -140,6 +140,9 @@ class SalesBotConfig:
     dashboard_host: str
     dashboard_port: int
     dashboard_token: str
+    dashboard_session_ttl_minutes: int
+    dashboard_force_takeover_audit_enabled: bool
+    conversation_owner_ttl_minutes: int
     db_path: Path
     catalog_path: Path
     lead_magnet_path: Path
@@ -194,6 +197,9 @@ class SalesBotConfig:
             dashboard_host=os.getenv("AI_SALES_DASHBOARD_HOST", "127.0.0.1").strip() or "127.0.0.1",
             dashboard_port=max(1, int(os.getenv("AI_SALES_DASHBOARD_PORT", "8787").strip() or "8787")),
             dashboard_token=os.getenv("AI_SALES_DASHBOARD_TOKEN", "").strip(),
+            dashboard_session_ttl_minutes=max(1, int(os.getenv("AI_SALES_DASHBOARD_SESSION_TTL_MINUTES", "480").strip() or "480")),
+            dashboard_force_takeover_audit_enabled=os.getenv("AI_SALES_DASHBOARD_FORCE_TAKEOVER_AUDIT_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
+            conversation_owner_ttl_minutes=max(1, int(os.getenv("AI_SALES_CONVERSATION_OWNER_TTL_MINUTES", "120").strip() or "120")),
             dashboard_operators=_parse_dashboard_operators(
                 os.getenv("AI_SALES_DASHBOARD_OPERATORS", "").strip(),
                 fallback_name=manager_name,

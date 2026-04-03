@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +24,10 @@ def _read_dashboard_html() -> bytes:
 
 class DashboardPermissionError(RuntimeError):
     pass
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _operator_payload(operator) -> dict[str, object]:
@@ -66,15 +71,89 @@ def _resolve_force_claim(snapshot, operator: dict[str, object] | None, requested
     return True
 
 
+def _create_operator_session(operator, *, now: datetime | None = None) -> dict[str, object]:
+    issued_at = (now or _utcnow()).isoformat()
+    return {
+        "operator": _operator_payload(operator),
+        "created_at": issued_at,
+        "last_seen_at": issued_at,
+    }
+
+
+def _session_is_expired(session: dict[str, object], *, ttl_minutes: int, now: datetime | None = None) -> bool:
+    raw_last_seen = session.get("last_seen_at") or session.get("created_at")
+    if not raw_last_seen:
+        return True
+    try:
+        last_seen_at = datetime.fromisoformat(str(raw_last_seen))
+    except ValueError:
+        return True
+    deadline = last_seen_at + timedelta(minutes=max(1, ttl_minutes))
+    return deadline <= (now or _utcnow())
+
+
+def _consume_operator_session(
+    operator_sessions: dict[str, dict[str, object]],
+    session_token: str,
+    *,
+    ttl_minutes: int,
+    now: datetime | None = None,
+    refresh: bool = True,
+) -> tuple[dict[str, object] | None, bool]:
+    token = str(session_token or "").strip()
+    if not token:
+        return None, False
+    session = operator_sessions.get(token)
+    if session is None:
+        return None, False
+    current_time = now or _utcnow()
+    if _session_is_expired(session, ttl_minutes=ttl_minutes, now=current_time):
+        operator_sessions.pop(token, None)
+        return None, True
+    if refresh:
+        session["last_seen_at"] = current_time.isoformat()
+    operator = session.get("operator")
+    if isinstance(operator, dict):
+        return dict(operator), False
+    return None, False
+
+
 def build_dashboard_handler(api: OperatorInboxAPI):
     operator_registry = {
         item.operator_id: item
         for item in api.config.dashboard_operators
     }
-    operator_sessions: dict[str, dict[str, str]] = {}
+    operator_sessions: dict[str, dict[str, object]] = {}
+    session_ttl_minutes = max(1, int(api.config.dashboard_session_ttl_minutes))
 
     class DashboardHandler(BaseHTTPRequestHandler):
         server_version = "LesDalDashboard/0.1"
+
+        def _current_operator(self) -> dict[str, object] | None:
+            if hasattr(self, "_cached_operator"):
+                return self._cached_operator
+            operator, expired = _consume_operator_session(
+                operator_sessions,
+                self.headers.get("X-Operator-Session", "").strip(),
+                ttl_minutes=session_ttl_minutes,
+            )
+            self._cached_operator = operator
+            self._operator_session_expired = expired
+            return operator
+
+        def _require_operator(self) -> dict[str, object] | None:
+            operator = self._current_operator()
+            if operator is not None:
+                return operator
+            expired = bool(getattr(self, "_operator_session_expired", False))
+            self._send_json(
+                {
+                    "error": "Session expired" if expired else "Operator session required",
+                    "reason": "session_expired" if expired else "operator_session_required",
+                },
+                status=HTTPStatus.UNAUTHORIZED,
+            )
+            return None
 
         def do_GET(self) -> None:
             if not self._authorize():
@@ -103,13 +182,18 @@ def build_dashboard_handler(api: OperatorInboxAPI):
             if parsed.path == "/api/auth/session":
                 operator = self._current_operator()
                 if operator is None:
-                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    self._send_json(
+                        {
+                            "error": "Session expired" if getattr(self, "_operator_session_expired", False) else "Operator session required",
+                            "reason": "session_expired" if getattr(self, "_operator_session_expired", False) else "operator_session_required",
+                        },
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
                     return
                 self._send_json({"operator": operator})
                 return
             if parsed.path == "/api/audit/forced-takeovers":
-                if self._current_operator() is None:
-                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                if self._require_operator() is None:
                     return
                 self._send_json(
                     api.get_forced_takeover_summary(
@@ -118,8 +202,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 )
                 return
             if parsed.path == "/api/audit/resolution-drilldown":
-                if self._current_operator() is None:
-                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                if self._require_operator() is None:
                     return
                 self._send_json(
                     api.get_resolution_speed_drilldown(
@@ -131,8 +214,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 )
                 return
             if parsed.path == "/api/conversations":
-                if self._current_operator() is None:
-                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                if self._require_operator() is None:
                     return
                 limit = self._query_int(parsed.query, "limit", default=50)
                 self._send_json(
@@ -151,8 +233,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 )
                 return
             if parsed.path.startswith("/api/conversations/"):
-                if self._current_operator() is None:
-                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                if self._require_operator() is None:
                     return
                 conversation_id, action = self._conversation_route(parsed.path)
                 if conversation_id is None or action is not None:
@@ -181,7 +262,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
                 session_token = secrets.token_urlsafe(24)
                 operator_payload = _operator_payload(operator)
-                operator_sessions[session_token] = operator_payload
+                operator_sessions[session_token] = _create_operator_session(operator)
                 self._send_json(
                     {
                         "ok": True,
@@ -200,9 +281,8 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 self._send_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
                 return
 
-            operator = self._current_operator()
+            operator = self._require_operator()
             if operator is None:
-                self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
                 return
 
             conversation_id, action = self._conversation_route(parsed.path)
@@ -407,12 +487,6 @@ def build_dashboard_handler(api: OperatorInboxAPI):
 
             self._send_json({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
             return False
-
-        def _current_operator(self) -> dict[str, str] | None:
-            session_token = self.headers.get("X-Operator-Session", "").strip()
-            if not session_token:
-                return None
-            return operator_sessions.get(session_token)
 
         def _send_json(self, payload: dict, *, status: HTTPStatus = HTTPStatus.OK) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

@@ -113,8 +113,31 @@ class SalesBotConfigTests(unittest.TestCase):
 
         self.assertEqual(config.dashboard_host, "127.0.0.1")
         self.assertEqual(config.dashboard_port, 8787)
+        self.assertEqual(config.dashboard_session_ttl_minutes, 480)
+        self.assertTrue(config.dashboard_force_takeover_audit_enabled)
+        self.assertEqual(config.conversation_owner_ttl_minutes, 120)
         self.assertEqual(len(config.dashboard_operators), 1)
         self.assertEqual(config.dashboard_operators[0].operator_id, "manager")
+
+    def test_dashboard_ttl_settings_parse_from_env(self) -> None:
+        env_path = TEST_RUNTIME_DIR / "config_dashboard_ttl.env"
+        env_path.write_text(
+            "\n".join(
+                [
+                    "AI_SALES_DASHBOARD_SESSION_TTL_MINUTES=30",
+                    "AI_SALES_DASHBOARD_FORCE_TAKEOVER_AUDIT_ENABLED=false",
+                    "AI_SALES_CONVERSATION_OWNER_TTL_MINUTES=45",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        with mock.patch.dict("os.environ", {}, clear=True):
+            config = SalesBotConfig.from_env(env_path)
+
+        self.assertEqual(config.dashboard_session_ttl_minutes, 30)
+        self.assertFalse(config.dashboard_force_takeover_audit_enabled)
+        self.assertEqual(config.conversation_owner_ttl_minutes, 45)
 
     def test_dashboard_operators_parse_from_env(self) -> None:
         env_path = TEST_RUNTIME_DIR / "config_dashboard_operators.env"
