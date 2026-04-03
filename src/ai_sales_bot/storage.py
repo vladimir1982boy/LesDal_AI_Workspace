@@ -70,6 +70,13 @@ class SQLiteLeadRepository:
                 f"ALTER TABLE conversations ADD COLUMN {column_name} {column_sql}"
             )
 
+    def _ensure_lead_columns(self, conn: sqlite3.Connection) -> None:
+        existing = self._existing_columns(conn, "leads")
+        if "manager_notes" not in existing:
+            conn.execute(
+                "ALTER TABLE leads ADD COLUMN manager_notes TEXT NOT NULL DEFAULT ''"
+            )
+
     def _init_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(
@@ -96,6 +103,7 @@ class SQLiteLeadRepository:
                     mode TEXT NOT NULL,
                     city TEXT NOT NULL DEFAULT '',
                     summary TEXT NOT NULL DEFAULT '',
+                    manager_notes TEXT NOT NULL DEFAULT '',
                     interested_products TEXT NOT NULL DEFAULT '[]',
                     tags TEXT NOT NULL DEFAULT '[]',
                     amocrm_lead_id TEXT NOT NULL DEFAULT '',
@@ -164,6 +172,7 @@ class SQLiteLeadRepository:
                 """
             )
             self._ensure_conversation_columns(conn)
+            self._ensure_lead_columns(conn)
             conn.execute(
                 """
                 UPDATE conversations
@@ -246,14 +255,15 @@ class SQLiteLeadRepository:
             cursor = conn.execute(
                 """
                 INSERT INTO leads (
-                    contact_id, source_channel, stage, mode, created_at, updated_at, last_message_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    contact_id, source_channel, stage, mode, manager_notes, created_at, updated_at, last_message_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     contact_id,
                     source_channel.value,
                     stage.value,
                     mode.value,
+                    "",
                     now,
                     now,
                     now,
@@ -424,6 +434,7 @@ class SQLiteLeadRepository:
         city: str | None = None,
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
+        manager_notes: str | None = None,
         amocrm_lead_id: str | None = None,
     ) -> None:
         updates: list[str] = []
@@ -438,6 +449,9 @@ class SQLiteLeadRepository:
         if summary is not None:
             updates.append("summary = ?")
             params.append(summary)
+        if manager_notes is not None:
+            updates.append("manager_notes = ?")
+            params.append(manager_notes)
         if city is not None:
             updates.append("city = ?")
             params.append(city)
@@ -582,6 +596,7 @@ class SQLiteLeadRepository:
                     c.needs_attention,
                     l.city,
                     l.summary,
+                    l.manager_notes,
                     l.tags,
                     l.interested_products,
                     ct.display_name,
@@ -613,6 +628,7 @@ class SQLiteLeadRepository:
             city=str(row["city"] or ""),
             tags=json.loads(row["tags"] or "[]"),
             interested_products=json.loads(row["interested_products"] or "[]"),
+            manager_notes=str(row["manager_notes"] or ""),
             created_at=datetime.fromisoformat(str(row["created_at"])),
             updated_at=datetime.fromisoformat(str(row["updated_at"])),
             status=_normalize_status(row["status"]),
@@ -653,6 +669,7 @@ class SQLiteLeadRepository:
                     c.needs_attention,
                     l.stage,
                     l.summary,
+                    l.manager_notes,
                     ct.display_name,
                     ct.username,
                     c.last_message_at
@@ -736,8 +753,11 @@ class JSONLeadRepository:
         counters.setdefault("messages", 0)
         counters.setdefault("lead_events", 0)
         counters.setdefault("conversation_events", 0)
+        data.setdefault("leads", [])
         data.setdefault("inbound_events", [])
         data.setdefault("conversation_events", [])
+        for lead in data.get("leads", []):
+            lead.setdefault("manager_notes", "")
         for conversation in data.get("conversations", []):
             conversation.setdefault("status", ConversationStatus.NEW.value)
             if conversation["status"] == "open":
@@ -817,6 +837,7 @@ class JSONLeadRepository:
                 "mode": mode.value,
                 "city": "",
                 "summary": "",
+                "manager_notes": "",
                 "interested_products": [],
                 "tags": [],
                 "amocrm_lead_id": "",
@@ -975,6 +996,7 @@ class JSONLeadRepository:
         city: str | None = None,
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
+        manager_notes: str | None = None,
         amocrm_lead_id: str | None = None,
     ) -> None:
         data = self._load()
@@ -987,6 +1009,8 @@ class JSONLeadRepository:
                 lead["mode"] = mode.value
             if summary is not None:
                 lead["summary"] = summary
+            if manager_notes is not None:
+                lead["manager_notes"] = manager_notes
             if city is not None:
                 lead["city"] = city
             if interested_products is not None:
@@ -1107,6 +1131,7 @@ class JSONLeadRepository:
             city=str(lead.get("city", "")),
             tags=list(lead.get("tags", [])),
             interested_products=list(lead.get("interested_products", [])),
+            manager_notes=str(lead.get("manager_notes", "")),
             created_at=datetime.fromisoformat(conversation["created_at"]),
             updated_at=datetime.fromisoformat(conversation["updated_at"]),
             status=_normalize_status(conversation.get("status")),
@@ -1148,6 +1173,7 @@ class JSONLeadRepository:
                     "needs_attention": bool(conversation.get("needs_attention", False)),
                     "stage": lead.get("stage", LeadStage.NEW.value),
                     "summary": lead.get("summary", ""),
+                    "manager_notes": lead.get("manager_notes", ""),
                     "display_name": contact.get("display_name", ""),
                     "username": contact.get("username", ""),
                     "last_message_at": conversation["last_message_at"],

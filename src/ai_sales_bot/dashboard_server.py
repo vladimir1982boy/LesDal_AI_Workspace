@@ -173,6 +173,24 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         }
                     )
                     return
+
+                if action == "notes":
+                    payload = self._read_json()
+                    notes = str(payload.get("notes") or "")
+                    operator_name = str(payload.get("operator_name") or "").strip()
+                    result = api.update_manager_notes(
+                        conversation_id,
+                        notes=notes,
+                        operator_name=operator_name,
+                    )
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
+                            "outbound_sent": result.outbound_sent,
+                        }
+                    )
+                    return
             except ConversationOwnershipError as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
                 return

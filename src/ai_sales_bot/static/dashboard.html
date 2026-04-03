@@ -343,6 +343,32 @@
       font-size: 13px;
       line-height: 1.35;
     }
+    .template-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .template-button {
+      padding: 9px 11px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .manager-notes {
+      min-height: 118px;
+      margin-top: 10px;
+    }
+    .inline-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      align-items: center;
+    }
     .composer {
       border-top: 1px solid var(--line);
       padding: 18px;
@@ -994,6 +1020,7 @@
     function renderDetails() {
       const snapshot = state.detail?.snapshot;
       const events = state.detail?.events || [];
+      const replyTemplates = state.detail?.reply_templates || [];
       if (!snapshot) {
         el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
         return;
@@ -1029,6 +1056,23 @@
           <div>${escapeHtml(summary)}</div>
         </div>
         <div class="detail-block">
+          <div class="detail-label">Заметки менеджера</div>
+          <textarea id="managerNotesInput" class="manager-notes" placeholder="Короткие внутренние заметки по лиду, договорённостям и следующему шагу..."></textarea>
+          <div class="inline-actions">
+            <button id="saveNotesButton" class="ghost">Сохранить заметки</button>
+            <span style="font-size:12px; color:var(--muted);">Эти заметки видны только внутри operator dashboard.</span>
+          </div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Быстрые шаблоны</div>
+          <div style="font-size:13px; color:var(--muted);">Шаблон подставляется в поле ответа, после чего его можно отредактировать перед отправкой.</div>
+          <div class="template-list">
+            ${replyTemplates.length ? replyTemplates.map((item) => `
+              <button class="template-button reply-template" data-text="${escapeAttr(item.text || "")}">${escapeHtml(item.title || "Шаблон")}</button>
+            `).join("") : '<div style="color:var(--muted);">Шаблоны пока не настроены.</div>'}
+          </div>
+        </div>
+        <div class="detail-block">
           <div class="detail-label">Журнал событий</div>
           <div class="event-list">
             ${events.length ? events.map((row) => `
@@ -1041,6 +1085,26 @@
           </div>
         </div>
       `;
+      const saveNotesButton = document.getElementById("saveNotesButton");
+      const managerNotesInput = document.getElementById("managerNotesInput");
+      if (saveNotesButton && managerNotesInput) {
+        managerNotesInput.value = snapshot.manager_notes || "";
+        saveNotesButton.addEventListener("click", async () => {
+          await postAction("notes", {
+            notes: managerNotesInput.value,
+            operator_name: currentOperator(),
+          });
+        });
+      }
+      el.details.querySelectorAll(".reply-template").forEach((node) => {
+        node.addEventListener("click", () => {
+          const text = node.dataset.text || "";
+          el.replyText.value = text;
+          el.replyText.focus();
+          el.status.textContent = "Шаблон подставлен в ответ менеджера.";
+          el.status.classList.remove("alert");
+        });
+      });
     }
 
     function renderHeader() {
@@ -1077,6 +1141,12 @@
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value)
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
     }
 
     async function refreshConversations() {

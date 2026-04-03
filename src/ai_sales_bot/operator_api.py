@@ -11,6 +11,30 @@ from .outbound import OutboundDispatcher
 from .services import ConversationOwnershipError
 
 
+DEFAULT_REPLY_TEMPLATES: tuple[dict[str, str], ...] = (
+    {
+        "id": "clarify_need",
+        "title": "Уточнить запрос",
+        "text": "Спасибо, что написали. Подскажите, пожалуйста, какой именно результат вы хотите получить и в каком формате вам удобнее продолжить общение?",
+    },
+    {
+        "id": "send_catalog",
+        "title": "Предложить варианты",
+        "text": "Подобрал для вас несколько подходящих вариантов. Если хотите, я коротко сравню их по цене, составу и срокам поставки.",
+    },
+    {
+        "id": "booking_followup",
+        "title": "Договориться о контакте",
+        "text": "Могу помочь вам дальше вручную. Напишите, пожалуйста, удобный номер телефона или время для связи, и я всё подготовлю.",
+    },
+    {
+        "id": "payment_followup",
+        "title": "Довести до оплаты",
+        "text": "Если решение уже выбрано, я могу сейчас помочь с финальными деталями по оплате и отправке. Подтвердите, пожалуйста, какой вариант оставляем.",
+    },
+)
+
+
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
@@ -102,6 +126,7 @@ class OperatorInboxAPI:
                 for row in events
             ],
             "summary": summary,
+            "reply_templates": [dict(item) for item in DEFAULT_REPLY_TEMPLATES],
         }
 
     def pause_conversation(self, conversation_id: int) -> OperatorActionResult:
@@ -196,6 +221,21 @@ class OperatorInboxAPI:
         snapshot = self.service.set_conversation_status(
             conversation_id=conversation_id,
             status=ConversationStatus(status),
+            actor=operator_name,
+        )
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(snapshot=snapshot)
+
+    def update_manager_notes(
+        self,
+        conversation_id: int,
+        *,
+        notes: str,
+        operator_name: str = "",
+    ) -> OperatorActionResult:
+        snapshot = self.service.update_manager_notes(
+            conversation_id=conversation_id,
+            notes=notes,
             actor=operator_name,
         )
         self.lead_sync.sync_snapshot(snapshot)

@@ -24,7 +24,7 @@ class RepositoryProtocol(Protocol):
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]: ...
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None: ...
     def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
-    def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, amocrm_lead_id: str | None = None) -> None: ...
+    def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]: ...
 
 
@@ -141,6 +141,7 @@ class SalesBotService:
         city: str | None = None,
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
+        manager_notes: str | None = None,
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
@@ -151,7 +152,28 @@ class SalesBotService:
             city=city,
             interested_products=interested_products,
             tags=tags,
+            manager_notes=manager_notes,
             amocrm_lead_id=amocrm_lead_id,
+        )
+        return self.repository.get_snapshot(conversation_id)
+
+    def update_manager_notes(
+        self,
+        *,
+        conversation_id: int,
+        notes: str,
+        actor: str = "",
+    ) -> ConversationSnapshot:
+        snapshot = self.repository.get_snapshot(conversation_id)
+        self.repository.update_lead(
+            lead_id=snapshot.lead_id,
+            manager_notes=notes,
+        )
+        self.repository.add_conversation_event(
+            conversation_id=conversation_id,
+            event_type="manager_notes_updated",
+            actor=actor,
+            payload={"notes": notes},
         )
         return self.repository.get_snapshot(conversation_id)
 

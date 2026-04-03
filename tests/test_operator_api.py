@@ -73,6 +73,18 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(result.snapshot.status, ConversationStatus.CLOSED)
         self.assertEqual(self.service.last_status, ConversationStatus.CLOSED)
 
+    def test_update_manager_notes_updates_snapshot(self) -> None:
+        result = self.api.update_manager_notes(3, notes="Client prefers evening call", operator_name="Alice")
+
+        self.assertEqual(result.snapshot.manager_notes, "Client prefers evening call")
+        self.assertEqual(self.service.last_notes, "Client prefers evening call")
+
+    def test_get_conversation_includes_reply_templates(self) -> None:
+        payload = self.api.get_conversation(3)
+
+        self.assertTrue(payload["reply_templates"])
+        self.assertIn("title", payload["reply_templates"][0])
+
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
 
@@ -113,6 +125,7 @@ class _FakeService:
         self.claimed_by = ""
         self.released_by = ""
         self.last_status = snapshot.status
+        self.last_notes = snapshot.manager_notes
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -182,6 +195,17 @@ class _FakeService:
     ) -> ConversationSnapshot:
         self.snapshot.status = status
         self.last_status = status
+        return self.snapshot
+
+    def update_manager_notes(
+        self,
+        *,
+        conversation_id: int,
+        notes: str,
+        actor: str = "",
+    ) -> ConversationSnapshot:
+        self.snapshot.manager_notes = notes
+        self.last_notes = notes
         return self.snapshot
 
     def record_manager_reply(

@@ -26,6 +26,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertIsNotNone(snapshot.last_customer_message_at)
         self.assertIsNone(snapshot.last_manager_message_at)
         self.assertFalse(snapshot.needs_attention)
+        self.assertEqual(snapshot.manager_notes, "")
 
     def test_json_snapshot_contains_operator_fields(self) -> None:
         repo = JSONLeadRepository(self.json_path)
@@ -37,6 +38,25 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertIsNotNone(snapshot.last_customer_message_at)
         self.assertIsNone(snapshot.last_manager_message_at)
         self.assertFalse(snapshot.needs_attention)
+        self.assertEqual(snapshot.manager_notes, "")
+
+    def test_sqlite_can_persist_manager_notes(self) -> None:
+        repo = SQLiteLeadRepository(self.sqlite_path)
+        snapshot = self._ingest(repo)
+
+        repo.update_lead(lead_id=snapshot.lead_id, manager_notes="Needs callback after 18:00")
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
+
+    def test_json_can_persist_manager_notes(self) -> None:
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = self._ingest(repo)
+
+        repo.update_lead(lead_id=snapshot.lead_id, manager_notes="Needs callback after 18:00")
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
 
     def test_sqlite_get_conversation_target_includes_external_user_id(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)

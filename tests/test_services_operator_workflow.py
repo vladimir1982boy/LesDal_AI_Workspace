@@ -81,6 +81,16 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 operator_name="Bob",
             )
 
+    def test_update_manager_notes_persists_and_logs_event(self) -> None:
+        snapshot = self.service.update_manager_notes(
+            conversation_id=3,
+            notes="Priority client, prefers WhatsApp-style pacing.",
+            actor="Alice",
+        )
+
+        self.assertEqual(snapshot.manager_notes, "Priority client, prefers WhatsApp-style pacing.")
+        self.assertEqual(self.repo.events[-1]["event_type"], "manager_notes_updated")
+
 
 class _FakeRepository:
     def __init__(self, snapshot: ConversationSnapshot) -> None:
@@ -161,6 +171,8 @@ class _FakeRepository:
             self.snapshot.needs_attention = needs_attention
 
     def update_lead(self, **kwargs) -> None:
+        if "manager_notes" in kwargs and kwargs["manager_notes"] is not None:
+            self.snapshot.manager_notes = kwargs["manager_notes"]
         return None
 
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]:

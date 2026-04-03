@@ -84,6 +84,7 @@ class ConversationSnapshot:
     city: str = ""
     tags: list[str] = field(default_factory=list)
     interested_products: list[str] = field(default_factory=list)
+    manager_notes: str = ""
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
     status: ConversationStatus = ConversationStatus.NEW
