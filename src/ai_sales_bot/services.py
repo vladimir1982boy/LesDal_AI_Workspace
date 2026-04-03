@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Protocol
+import json
 
 from .domain import ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
 
@@ -26,6 +27,7 @@ class RepositoryProtocol(Protocol):
     def get_conversation_target(self, conversation_id: int) -> dict: ...
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]: ...
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]: ...
+    def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]: ...
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None: ...
     def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_id: str | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
     def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, priority: LeadPriority | None = None, follow_up_date: str | None = None, next_action: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
@@ -437,3 +439,58 @@ class SalesBotService:
     def get_conversation_events(self, *, conversation_id: int, limit: int = 50) -> list[dict]:
         rows = self.repository.list_conversation_events(conversation_id, limit=limit)
         return [dict(row) for row in rows]
+
+    def get_forced_takeover_summary(self, *, limit: int = 200) -> dict:
+        rows = self.repository.list_forced_takeover_events(limit=limit)
+        events = [dict(row) for row in rows]
+        now = _utcnow()
+        today = now.date()
+        week_start = now.date().fromordinal(today.toordinal() - today.weekday())
+        today_count = 0
+        week_count = 0
+        by_operator: dict[str, int] = {}
+        recent: list[dict] = []
+        for row in events:
+            created_at_raw = row.get("created_at")
+            created_at = None
+            if created_at_raw:
+                try:
+                    created_at = datetime.fromisoformat(str(created_at_raw))
+                except ValueError:
+                    created_at = None
+            actor = str(row.get("actor") or "unknown")
+            payload = row.get("payload") or {}
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except json.JSONDecodeError:
+                    payload = {}
+            by_operator[actor] = by_operator.get(actor, 0) + 1
+            if created_at is not None:
+                event_date = created_at.astimezone(timezone.utc).date()
+                if event_date == today:
+                    today_count += 1
+                if event_date >= week_start:
+                    week_count += 1
+            recent.append(
+                {
+                    "conversation_id": row.get("conversation_id"),
+                    "actor": actor,
+                    "created_at": created_at_raw,
+                    "display_name": row.get("display_name", ""),
+                    "channel": row.get("channel", ""),
+                    "previous_owner_name": payload.get("previous_owner_name", row.get("previous_owner_name", "")),
+                    "previous_owner_id": payload.get("previous_owner_id", row.get("previous_owner_id", "")),
+                }
+            )
+        by_operator_items = [
+            {"operator": operator, "count": count}
+            for operator, count in sorted(by_operator.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        return {
+            "today_count": today_count,
+            "week_count": week_count,
+            "total_count": len(events),
+            "by_operator": by_operator_items,
+            "recent": recent[:8],
+        }

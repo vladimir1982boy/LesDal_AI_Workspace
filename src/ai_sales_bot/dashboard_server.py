@@ -107,6 +107,12 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
                 self._send_json({"operator": operator})
                 return
+            if parsed.path == "/api/audit/forced-takeovers":
+                if self._current_operator() is None:
+                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                self._send_json(api.get_forced_takeover_summary())
+                return
             if parsed.path == "/api/conversations":
                 if self._current_operator() is None:
                     self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)

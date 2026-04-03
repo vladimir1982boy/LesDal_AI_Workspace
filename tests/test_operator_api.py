@@ -124,6 +124,12 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertTrue(payload["reply_templates"])
         self.assertIn("title", payload["reply_templates"][0])
 
+    def test_get_forced_takeover_summary_proxies_service_summary(self) -> None:
+        payload = self.api.get_forced_takeover_summary()
+
+        self.assertEqual(payload["today_count"], 1)
+        self.assertEqual(payload["by_operator"][0]["operator"], "Lead")
+
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
 
@@ -193,6 +199,15 @@ class _FakeService:
 
     def get_conversation_events(self, *, conversation_id: int, limit: int = 50) -> list[dict]:
         return []
+
+    def get_forced_takeover_summary(self, *, limit: int = 200) -> dict:
+        return {
+            "today_count": 1,
+            "week_count": 2,
+            "total_count": 2,
+            "by_operator": [{"operator": "Lead", "count": 2}],
+            "recent": [],
+        }
 
     def build_manager_summary(self, *, conversation_id: int, limit: int = 12) -> str:
         return "Summary"

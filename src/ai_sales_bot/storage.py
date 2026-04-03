@@ -831,6 +831,27 @@ class SQLiteLeadRepository:
                 (conversation_id, limit),
             ).fetchall()
 
+    def list_forced_takeover_events(self, *, limit: int = 200) -> list[sqlite3.Row]:
+        with self._connect() as conn:
+            return conn.execute(
+                """
+                SELECT
+                    e.conversation_id,
+                    e.actor,
+                    e.payload,
+                    e.created_at,
+                    c.channel,
+                    ct.display_name
+                FROM conversation_events e
+                JOIN conversations c ON c.id = e.conversation_id
+                JOIN contacts ct ON ct.id = c.contact_id
+                WHERE e.event_type = 'force_claimed_by_supervisor'
+                ORDER BY e.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+
 
 class JSONLeadRepository:
     def __init__(self, db_path: str | Path) -> None:
@@ -1376,4 +1397,32 @@ class JSONLeadRepository:
             if int(row["conversation_id"]) == conversation_id
         ]
         rows.sort(key=lambda item: int(item["id"]), reverse=True)
+        return rows[:limit]
+
+    def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]:
+        data = self._load()
+        conversations = {int(item["id"]): item for item in data["conversations"]}
+        contacts = {int(item["id"]): item for item in data["contacts"]}
+        rows: list[dict] = []
+        for row in data["conversation_events"]:
+            if str(row.get("event_type", "")) != "force_claimed_by_supervisor":
+                continue
+            conversation_id = int(row["conversation_id"])
+            conversation = conversations.get(conversation_id, {})
+            contact = contacts.get(int(conversation.get("contact_id", 0) or 0), {})
+            payload = row.get("payload") or {}
+            rows.append(
+                {
+                    "conversation_id": conversation_id,
+                    "actor": row.get("actor", ""),
+                    "payload": payload,
+                    "created_at": row.get("created_at"),
+                    "channel": conversation.get("channel", ""),
+                    "display_name": contact.get("display_name", ""),
+                    "previous_owner_name": payload.get("previous_owner_name", ""),
+                    "previous_owner_id": payload.get("previous_owner_id", ""),
+                    "id": row.get("id", 0),
+                }
+            )
+        rows.sort(key=lambda item: int(item.get("id", 0)), reverse=True)
         return rows[:limit]

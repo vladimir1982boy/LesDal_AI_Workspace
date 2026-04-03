@@ -164,6 +164,43 @@
       padding: 12px;
       background: linear-gradient(180deg, rgba(255, 244, 228, 0.92), rgba(255, 255, 255, 0.92));
     }
+    .audit-board {
+      grid-column: 1 / -1;
+      border: 1px solid #dcae9d;
+      border-radius: 18px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(255, 241, 235, 0.96), rgba(255, 250, 242, 0.96));
+    }
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .audit-metric {
+      border: 1px solid rgba(220, 174, 157, 0.7);
+      border-radius: 14px;
+      background: white;
+      padding: 12px;
+    }
+    .audit-metric strong {
+      display: block;
+      font-size: 22px;
+      margin-top: 6px;
+    }
+    .audit-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .audit-row {
+      border: 1px solid rgba(220, 174, 157, 0.6);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
     .risk-toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -658,6 +695,7 @@
       selectedOperatorId: localStorage.getItem(operatorChoiceStorageKey) || "",
       operator: null,
       operators: [],
+      auditSummary: null,
       soundEnabled: localStorage.getItem(soundStorageKey) === "true",
       browserNotifyEnabled: localStorage.getItem(browserNotifyStorageKey) === "true",
       alertingUntil: 0,
@@ -985,6 +1023,19 @@
       const days = Math.floor(hours / 24);
       const remHours = hours % 24;
       return remHours ? `${days} д ${remHours} ч` : `${days} д`;
+    }
+
+    function formatDateTime(value) {
+      const date = parseIso(value);
+      if (!date) {
+        return String(value || "—");
+      }
+      return date.toLocaleString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
 
     function slaSnapshot(item) {
@@ -1390,6 +1441,61 @@
       `;
     }
 
+    function renderAuditBoard() {
+      const summary = state.auditSummary;
+      if (!summary) {
+        return "";
+      }
+      const byOperator = summary.by_operator || [];
+      const recent = summary.recent || [];
+      return `
+        <section class="audit-board">
+          <div class="queue-title">
+            <span>Supervisor Audit</span>
+            <span class="queue-count">${summary.total_count || 0}</span>
+          </div>
+          <div class="risk-note">Агрегированная сводка по принудительным takeover-событиям, чтобы supervisor видел не только отдельные кейсы, но и общий паттерн за день и неделю.</div>
+          <div class="audit-grid">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced today</div>
+              <strong>${summary.today_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced this week</div>
+              <strong>${summary.week_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Всего в ленте</div>
+              <strong>${summary.total_count || 0}</strong>
+            </div>
+          </div>
+          <div class="audit-grid" style="grid-template-columns: 1.2fr 1fr;">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">By operator</div>
+              <div class="audit-list">
+                ${byOperator.length ? byOperator.slice(0, 5).map((item) => `
+                  <div class="audit-row"><strong style="font-size:14px; margin:0;">${escapeHtml(item.operator || "unknown")}</strong><div style="color:var(--muted); margin-top:4px;">forced takeover: ${item.count}</div></div>
+                `).join("") : '<div class="audit-row">Пока без forced takeover по операторам.</div>'}
+              </div>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Recent forced takeover</div>
+              <div class="audit-list">
+                ${recent.length ? recent.map((item) => `
+                  <div class="audit-row">
+                    <strong style="font-size:14px; margin:0;">${escapeHtml(item.actor || "unknown")}</strong>
+                    <div style="color:var(--muted); margin-top:4px;">${escapeHtml(item.display_name || `conv:${item.conversation_id}`)} · ${escapeHtml(item.channel || "-")}</div>
+                    <div style="margin-top:4px;">${escapeHtml(item.previous_owner_name || item.previous_owner_id || "без прошлого owner")} → forced takeover</div>
+                    <div style="color:var(--muted); margin-top:4px;">${escapeHtml(formatDateTime(item.created_at))}</div>
+                  </div>
+                `).join("") : '<div class="audit-row">Событий forced takeover пока нет.</div>'}
+              </div>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
     function renderConversations() {
       if (!state.operator) {
         el.list.innerHTML = `<div class="empty">Авторизуйтесь как оператор, чтобы открыть очереди и карточки.</div>`;
@@ -1402,12 +1508,16 @@
       if (state.kpiFocus === "today") el.riskTodayButton.classList.add("primary");
       if (state.kpiFocus === "overdue") el.riskOverdueButton.classList.add("primary");
       if (!state.conversations.length) {
-        el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
+        el.list.innerHTML = `
+          ${renderAuditBoard()}
+          <div class="empty">Под выбранные фильтры диалогов пока нет.</div>
+        `;
         return;
       }
       const filteredItems = state.conversations.filter((item) => matchesKpiFocus(item));
       if (!filteredItems.length) {
         el.list.innerHTML = `
+          ${renderAuditBoard()}
           ${renderRiskBoard(state.conversations)}
           <div class="empty">Под выбранный KPI-фокус диалогов пока нет.</div>
         `;
@@ -1440,6 +1550,7 @@
         items.sort((left, right) => slaSnapshot(right).score - slaSnapshot(left).score);
       });
       el.list.innerHTML = `
+        ${renderAuditBoard()}
         ${renderRiskBoard(state.conversations)}
         ${queueColumn("new", grouped.new)}
         ${queueColumn("in_progress", grouped.in_progress)}
@@ -1728,11 +1839,13 @@
     async function refreshConversations() {
       if (!state.operator) {
         state.conversations = [];
+        state.auditSummary = null;
         renderConversations();
         updateDocumentTitle();
         return;
       }
       const previous = state.conversations.slice();
+      state.auditSummary = await apiFetch("/api/audit/forced-takeovers");
       const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
       await handleQueueAlerts(previous, state.conversations);
@@ -1882,6 +1995,7 @@
     el.logoutButton.addEventListener("click", async () => {
       await logoutOperator();
       state.conversations = [];
+      state.auditSummary = null;
       state.detail = null;
       state.selectedId = null;
       persistView();

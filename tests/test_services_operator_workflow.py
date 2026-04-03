@@ -145,11 +145,53 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 actor="Alice",
             )
 
+    def test_forced_takeover_summary_aggregates_by_day_week_and_operator(self) -> None:
+        self.repo.forced_events = [
+            {
+                "conversation_id": 3,
+                "actor": "Lead",
+                "created_at": "2026-04-03T10:00:00+00:00",
+                "payload": {"previous_owner_id": "alice"},
+                "display_name": "Test User",
+                "channel": "vk",
+            },
+            {
+                "conversation_id": 4,
+                "actor": "Lead",
+                "created_at": "2026-04-01T10:00:00+00:00",
+                "payload": {"previous_owner_id": "bob"},
+                "display_name": "Second User",
+                "channel": "telegram",
+            },
+            {
+                "conversation_id": 5,
+                "actor": "Supervisor 2",
+                "created_at": "2026-03-25T10:00:00+00:00",
+                "payload": {"previous_owner_id": "carol"},
+                "display_name": "Old User",
+                "channel": "max",
+            },
+        ]
+
+        from unittest import mock
+        from datetime import datetime, timezone
+
+        with mock.patch("src.ai_sales_bot.services._utcnow", return_value=datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)):
+            summary = self.service.get_forced_takeover_summary(limit=10)
+
+        self.assertEqual(summary["today_count"], 1)
+        self.assertEqual(summary["week_count"], 2)
+        self.assertEqual(summary["total_count"], 3)
+        self.assertEqual(summary["by_operator"][0]["operator"], "Lead")
+        self.assertEqual(summary["by_operator"][0]["count"], 2)
+        self.assertEqual(summary["recent"][0]["actor"], "Lead")
+
 
 class _FakeRepository:
     def __init__(self, snapshot: ConversationSnapshot) -> None:
         self.snapshot = snapshot
         self.events: list[dict] = []
+        self.forced_events: list[dict] = []
 
     def ingest_customer_message(self, message: InboundMessage) -> ConversationSnapshot:
         return self.snapshot
@@ -194,6 +236,9 @@ class _FakeRepository:
 
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]:
         return self.events[:limit]
+
+    def list_forced_takeover_events(self, *, limit: int = 200) -> list[dict]:
+        return self.forced_events[:limit]
 
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None:
         self.snapshot.mode = mode
