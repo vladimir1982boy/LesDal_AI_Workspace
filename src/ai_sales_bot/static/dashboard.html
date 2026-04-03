@@ -93,6 +93,10 @@
       background: linear-gradient(180deg, rgba(255, 224, 214, 0.88), rgba(255, 250, 242, 0.92));
       border-color: #e0b39e;
     }
+    .queue-column.waiting.alert {
+      animation: waitingPulse 1.2s ease-in-out infinite;
+      box-shadow: 0 0 0 1px rgba(184, 77, 53, 0.12), 0 0 0 8px rgba(184, 77, 53, 0.08);
+    }
     .queue-header {
       padding: 14px 14px 10px;
       border-bottom: 1px solid var(--line);
@@ -111,6 +115,9 @@
       color: var(--muted);
       font-size: 12px;
       line-height: 1.35;
+    }
+    .queue-column.waiting.alert .queue-note {
+      color: #8a3a26;
     }
     .queue-count {
       min-width: 28px;
@@ -383,6 +390,10 @@
       font-size: 13px;
       color: var(--muted);
     }
+    .status.alert {
+      color: var(--danger);
+      font-weight: 700;
+    }
     .empty {
       display: grid;
       place-items: center;
@@ -390,6 +401,11 @@
       color: var(--muted);
       text-align: center;
       padding: 32px;
+    }
+    @keyframes waitingPulse {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+      100% { transform: translateY(0); }
     }
     @media (max-width: 1024px) {
       .app { grid-template-columns: 1fr; }
@@ -439,6 +455,10 @@
           <div class="filter-grid">
             <input id="ownerFilter" placeholder="Фильтр по owner" />
             <button id="mineButton" class="ghost">Только мои</button>
+          </div>
+          <div class="filter-grid">
+            <button id="soundToggle" class="ghost">Звук: выкл</button>
+            <button id="notifyToggle" class="ghost">Браузер: выкл</button>
           </div>
         </div>
       </div>
@@ -490,11 +510,20 @@
   <script>
     const authToken = new URLSearchParams(window.location.search).get("token") || "";
     const operatorStorageKey = "lesdal.operator_name";
+    const soundStorageKey = "lesdal.alert_sound";
+    const browserNotifyStorageKey = "lesdal.browser_notify";
+    const defaultTitle = document.title;
     const state = {
       conversations: [],
       selectedId: null,
       detail: null,
       onlyMine: false,
+      soundEnabled: localStorage.getItem(soundStorageKey) === "true",
+      browserNotifyEnabled: localStorage.getItem(browserNotifyStorageKey) === "true",
+      alertingUntil: 0,
+      lastWaitingIds: [],
+      audioContextReady: false,
+      audioContext: null,
     };
 
     const el = {
@@ -519,9 +548,12 @@
       attentionFilter: document.getElementById("attentionFilter"),
       ownerFilter: document.getElementById("ownerFilter"),
       mineButton: document.getElementById("mineButton"),
+      soundToggle: document.getElementById("soundToggle"),
+      notifyToggle: document.getElementById("notifyToggle"),
     };
 
     el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
+    renderAlertToggles();
 
     function authHeaders(extra = {}) {
       return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
@@ -678,6 +710,127 @@
       return "";
     }
 
+    function browserNotifyAvailable() {
+      return typeof window !== "undefined" && "Notification" in window;
+    }
+
+    function notificationStateLabel() {
+      if (!browserNotifyAvailable()) {
+        return "Браузер: недоступен";
+      }
+      if (Notification.permission === "granted" && state.browserNotifyEnabled) {
+        return "Браузер: вкл";
+      }
+      if (Notification.permission === "denied") {
+        return "Браузер: запрещён";
+      }
+      return state.browserNotifyEnabled ? "Браузер: ждёт доступ" : "Браузер: выкл";
+    }
+
+    function renderAlertToggles() {
+      el.soundToggle.textContent = state.soundEnabled ? "Звук: вкл" : "Звук: выкл";
+      el.notifyToggle.textContent = notificationStateLabel();
+      el.notifyToggle.disabled = !browserNotifyAvailable() || Notification.permission === "denied";
+    }
+
+    async function ensureAudioContext() {
+      if (state.audioContextReady) {
+        return state.audioContext;
+      }
+      const AudioCtor = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtor) {
+        return null;
+      }
+      state.audioContext = state.audioContext || new AudioCtor();
+      if (state.audioContext.state === "suspended") {
+        try {
+          await state.audioContext.resume();
+        } catch (error) {
+          return null;
+        }
+      }
+      state.audioContextReady = state.audioContext.state === "running";
+      return state.audioContextReady ? state.audioContext : null;
+    }
+
+    async function playAlertSound() {
+      if (!state.soundEnabled) {
+        return;
+      }
+      const context = await ensureAudioContext();
+      if (!context) {
+        return;
+      }
+      const now = context.currentTime;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(740, now);
+      oscillator.frequency.exponentialRampToValueAtTime(520, now + 0.18);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.24);
+    }
+
+    async function triggerBrowserNotification(items) {
+      if (!state.browserNotifyEnabled || !browserNotifyAvailable()) {
+        return;
+      }
+      if (Notification.permission !== "granted") {
+        return;
+      }
+      const lead = items[0];
+      const title = items.length === 1
+        ? `Нужен ответ: ${lead.display_name || lead.username || `Диалог ${lead.id}`}`
+        : `Новых диалогов для менеджера: ${items.length}`;
+      const body = items.length === 1
+        ? `${lead.channel} · ${lead.summary || "Откройте карточку и ответьте клиенту."}`
+        : "Очередь waiting_manager пополнилась. Откройте доску оператора.";
+      const notification = new Notification(title, {
+        body,
+        tag: "lesdal-waiting-manager",
+      });
+      notification.onclick = () => {
+        window.focus();
+      };
+    }
+
+    function updateDocumentTitle() {
+      const waitingCount = state.conversations.filter((item) => item.status === "waiting_manager").length;
+      document.title = waitingCount ? `(${waitingCount}) ${defaultTitle}` : defaultTitle;
+    }
+
+    async function handleQueueAlerts(previousItems, nextItems) {
+      const previousWaiting = new Map(
+        previousItems
+          .filter((item) => item.status === "waiting_manager")
+          .map((item) => [item.id, item])
+      );
+      const nextWaiting = nextItems.filter((item) => item.status === "waiting_manager");
+      const newAlerts = nextWaiting.filter((item) => !previousWaiting.has(item.id));
+      state.lastWaitingIds = nextWaiting.map((item) => item.id);
+      updateDocumentTitle();
+      if (!previousItems.length) {
+        return;
+      }
+      if (!newAlerts.length) {
+        if (state.alertingUntil <= Date.now()) {
+          el.status.classList.remove("alert");
+        }
+        return;
+      }
+      state.alertingUntil = Date.now() + 25000;
+      el.status.textContent = `Новые диалоги ждут менеджера: ${newAlerts.length}.`;
+      el.status.classList.add("alert");
+      await playAlertSound();
+      await triggerBrowserNotification(newAlerts);
+      renderConversations();
+    }
+
     function cardActions(item, compact = false) {
       if (compact) {
         return "";
@@ -743,8 +896,9 @@
 
     function queueColumn(status, items) {
       const waitingClass = status === "waiting_manager" ? " waiting" : "";
+      const alertClass = status === "waiting_manager" && state.alertingUntil > Date.now() && items.length ? " alert" : "";
       return `
-        <section class="queue-column${waitingClass}">
+        <section class="queue-column${waitingClass}${alertClass}">
           <div class="queue-header">
             <div class="queue-title">
               <span>${queueLabel(status)}</span>
@@ -926,8 +1080,10 @@
     }
 
     async function refreshConversations() {
+      const previous = state.conversations.slice();
       const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
+      await handleQueueAlerts(previous, state.conversations);
       renderConversations();
     }
 
@@ -935,16 +1091,19 @@
       state.selectedId = id;
       renderConversations();
       el.status.textContent = "Открываю диалог...";
+      el.status.classList.remove("alert");
       state.detail = await apiFetch(`/api/conversations/${id}`);
       renderHeader();
       renderThread();
       renderDetails();
       renderComposer();
       el.status.textContent = `Открыт диалог [conv:${id}].`;
+      el.status.classList.remove("alert");
     }
 
     async function postConversationAction(conversationId, action, body = {}) {
       el.status.textContent = "Отправляю действие...";
+      el.status.classList.remove("alert");
       try {
         await apiFetch(`/api/conversations/${conversationId}/${action}`, {
           method: "POST",
@@ -964,6 +1123,7 @@
       await refreshConversations();
       await openConversation(conversationId);
       el.status.textContent = "Действие выполнено.";
+      el.status.classList.remove("alert");
       return true;
     }
 
@@ -1019,6 +1179,31 @@
         await applyFilters();
       }
     });
+    el.soundToggle.addEventListener("click", async () => {
+      state.soundEnabled = !state.soundEnabled;
+      localStorage.setItem(soundStorageKey, String(state.soundEnabled));
+      renderAlertToggles();
+      if (state.soundEnabled) {
+        await ensureAudioContext();
+      }
+    });
+    el.notifyToggle.addEventListener("click", async () => {
+      if (!browserNotifyAvailable()) {
+        return;
+      }
+      if (Notification.permission === "default") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          state.browserNotifyEnabled = false;
+          localStorage.setItem(browserNotifyStorageKey, "false");
+          renderAlertToggles();
+          return;
+        }
+      }
+      state.browserNotifyEnabled = !state.browserNotifyEnabled;
+      localStorage.setItem(browserNotifyStorageKey, String(state.browserNotifyEnabled));
+      renderAlertToggles();
+    });
     [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter, el.ownerFilter].forEach((node) => {
       node.addEventListener("change", applyFilters);
       if (node === el.searchInput || node === el.ownerFilter) {
@@ -1050,9 +1235,11 @@
 
     async function boot() {
       try {
+        await ensureAudioContext();
         await applyFilters();
       } catch (error) {
         el.status.textContent = `Ошибка загрузки: ${error.message}`;
+        el.status.classList.add("alert");
       }
     }
 
@@ -1064,6 +1251,7 @@
         }
       } catch (error) {
         el.status.textContent = `Ошибка обновления: ${error.message}`;
+        el.status.classList.add("alert");
       }
     }, 5000);
 
