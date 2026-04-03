@@ -516,6 +516,14 @@
       color: var(--ink);
       background: white;
     }
+    select {
+      color: var(--ink);
+      background-color: white;
+    }
+    select option {
+      color: var(--ink);
+      background: white;
+    }
     textarea {
       min-height: 110px;
       resize: vertical;
@@ -615,6 +623,7 @@
             <button id="logoutButton" class="ghost">Выйти</button>
           </div>
           <div id="operatorStatusPill" class="operator-pill offline">Оператор не авторизован</div>
+          <div id="operatorHint" class="subtitle" style="margin-top:0"></div>
           <input id="searchInput" placeholder="Поиск по имени, summary или chat id" />
           <div class="filter-grid">
             <select id="channelFilter">
@@ -763,6 +772,7 @@
       loginButton: document.getElementById("loginButton"),
       logoutButton: document.getElementById("logoutButton"),
       operatorStatusPill: document.getElementById("operatorStatusPill"),
+      operatorHint: document.getElementById("operatorHint"),
       searchInput: document.getElementById("searchInput"),
       channelFilter: document.getElementById("channelFilter"),
       modeFilter: document.getElementById("modeFilter"),
@@ -870,6 +880,9 @@
         state.selectedOperatorId = el.operatorSelect.value;
         localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
       }
+      if (!el.operatorSelect.value && state.operators.length === 1) {
+        el.operatorSelect.value = state.operators[0].operator_id;
+      }
     }
 
     function renderAuthState() {
@@ -883,6 +896,20 @@
       el.logoutButton.disabled = !online;
       el.operatorSelect.disabled = online || !state.operators.length;
       el.operatorPin.disabled = online;
+      if (online) {
+        el.operatorHint.textContent = "";
+        return;
+      }
+      if (state.operators.length === 1) {
+        const operator = state.operators[0];
+        el.operatorHint.textContent = `Доступный оператор: ${operator.display_name} · ${operator.role || "manager"}${operator.pin_required ? " · нужен PIN" : " · PIN не требуется"}`;
+        return;
+      }
+      if (state.operators.length > 1) {
+        el.operatorHint.textContent = `Доступно операторов: ${state.operators.length}. Выберите нужного в списке выше.`;
+        return;
+      }
+      el.operatorHint.textContent = "Список операторов пока не загружен.";
     }
 
     async function loadOperators() {
@@ -911,7 +938,7 @@
     }
 
     async function loginOperator() {
-      const operatorId = el.operatorSelect.value;
+      const operatorId = el.operatorSelect.value || (state.operators.length === 1 ? state.operators[0].operator_id : "");
       const pin = el.operatorPin.value.trim();
       if (!operatorId) {
         setStatusMessage("Выберите оператора для входа.", "error");
