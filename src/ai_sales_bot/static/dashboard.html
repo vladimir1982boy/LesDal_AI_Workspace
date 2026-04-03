@@ -206,6 +206,26 @@
       font-size: 13px;
       line-height: 1.4;
     }
+    .kpi-strip {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .kpi-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .kpi-text {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .kpi-label {
+      color: #5f5448;
+      font-weight: 700;
+    }
     .card-actions {
       display: flex;
       gap: 8px;
@@ -254,6 +274,10 @@
     .badge.status-waiting_manager { background: #ffe0d6; color: var(--danger); }
     .badge.status-closed { background: #ececec; color: #666; }
     .badge.owner { background: #eef0ff; color: #46508b; }
+    .badge.priority-low { background: #eef1f6; color: #546173; }
+    .badge.priority-normal { background: #e9efe3; color: #556247; }
+    .badge.priority-high { background: #f6e7d1; color: #8a6435; }
+    .badge.priority-urgent { background: #ffe0d6; color: var(--danger); }
     .badge.sla-fresh { background: #e5f3e8; color: #2f6b52; }
     .badge.sla-watch { background: #f6ecd9; color: #8a6435; }
     .badge.sla-hot { background: #ffe0d6; color: var(--danger); }
@@ -655,6 +679,11 @@
       return `<span class="badge owner">${escapeHtml(owner)}</span>`;
     }
 
+    function priorityBadge(priority) {
+      const normalized = String(priority || "normal");
+      return `<span class="badge priority-${escapeHtml(normalized)}">${escapeHtml(normalized)}</span>`;
+    }
+
     function parseIso(value) {
       if (!value) {
         return null;
@@ -728,6 +757,43 @@
         return { level: "fresh", label: "Новый диалог", age: humanElapsed(freshMinutes), score: 30 + freshMinutes };
       }
       return { level: "cold", label: "Архив", age: humanElapsed(elapsedMinutes(item.last_message_at)), score: 0 };
+    }
+
+    function followUpSnapshot(item) {
+      const raw = String(item.follow_up_date || "").trim();
+      if (!raw) {
+        return { label: "follow-up не задан", level: "cold" };
+      }
+      const date = parseIso(raw);
+      if (!date) {
+        return { label: `follow-up: ${raw}`, level: "watch" };
+      }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const due = new Date(date);
+      due.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((due.getTime() - today.getTime()) / 86400000);
+      if (diffDays < 0) {
+        return { label: `просрочен на ${Math.abs(diffDays)} д`, level: "hot" };
+      }
+      if (diffDays === 0) {
+        return { label: "сегодня", level: "watch" };
+      }
+      if (diffDays === 1) {
+        return { label: "завтра", level: "fresh" };
+      }
+      return { label: raw, level: "cold" };
+    }
+
+    function shortenText(value, maxLength = 64) {
+      const text = String(value || "").trim();
+      if (!text) {
+        return "";
+      }
+      if (text.length <= maxLength) {
+        return text;
+      }
+      return `${text.slice(0, maxLength - 1)}…`;
     }
 
     function queueLabel(status) {
@@ -903,6 +969,8 @@
       const rootClass = compact ? "archive-card" : `conversation-item ${item.id === state.selectedId ? "active" : ""}`;
       const activeClass = compact && item.id === state.selectedId ? "active" : "";
       const sla = slaSnapshot(item);
+      const followUp = followUpSnapshot(item);
+      const nextAction = shortenText(item.next_action || "", compact ? 52 : 68);
       return `
         <article class="${rootClass}${activeClass ? ` ${activeClass}` : ""}" data-id="${item.id}">
           <div class="item-top">
@@ -917,12 +985,23 @@
           <div class="owner-row" style="margin-top:10px;">
             <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
               ${ownerBadge(item.owner_name || "")}
+              ${priorityBadge(item.priority || "normal")}
               <span class="badge sla-${sla.level}">${escapeHtml(sla.label)}</span>
             </div>
             <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || "")}</div>
           </div>
           <div style="margin-top:8px; font-size:12px; color:var(--muted);">Ожидание: ${escapeHtml(sla.age)}</div>
           <div class="item-summary">${escapeHtml(summary)}</div>
+          <div class="kpi-strip">
+            <div class="kpi-row">
+              <span class="kpi-label">Follow-up:</span>
+              <span class="badge sla-${followUp.level}">${escapeHtml(followUp.label)}</span>
+            </div>
+            <div class="kpi-text">
+              <span class="kpi-label">Next:</span>
+              ${escapeHtml(nextAction || "не задано")}
+            </div>
+          </div>
           ${cardActions(item, compact)}
         </article>
       `;
