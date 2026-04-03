@@ -32,7 +32,10 @@ def create_runtime(config: SalesBotConfig | None = None) -> SalesBotRuntime:
             fallback_path,
         )
         repository = JSONLeadRepository(fallback_path)
-    service = SalesBotService(repository)
+    service = SalesBotService(
+        repository,
+        owner_ttl_minutes=cfg.conversation_owner_ttl_minutes,
+    )
     catalog = ProductCatalog.from_json(cfg.catalog_path)
     return SalesBotRuntime(
         config=cfg,

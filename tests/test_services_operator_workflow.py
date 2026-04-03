@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
 from src.ai_sales_bot.services import ConversationOwnershipError, LeadProfileValidationError, SalesBotService
@@ -81,6 +82,41 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(snapshot.owner_name, "Supervisor")
         self.assertEqual(self.repo.events[-1]["event_type"], "force_claimed_by_supervisor")
         self.assertTrue(self.repo.events[-1]["payload"]["forced"])
+
+    def test_ownership_is_expired_returns_true_for_stale_owner(self) -> None:
+        self.snapshot.owner_claimed_at = datetime.now(timezone.utc) - timedelta(hours=3)
+
+        self.assertTrue(self.service.ownership_is_expired(self.snapshot))
+
+    def test_claim_allows_expired_owner_without_force_and_logs_expiry(self) -> None:
+        self.snapshot.owner_claimed_at = datetime.now(timezone.utc) - timedelta(hours=3)
+
+        snapshot = self.service.claim_conversation(
+            conversation_id=3,
+            operator_name="Bob",
+            operator_id="bob",
+        )
+
+        self.assertEqual(snapshot.owner_id, "bob")
+        self.assertEqual(snapshot.owner_name, "Bob")
+        self.assertEqual(self.repo.events[-2]["event_type"], "lock_expired")
+        self.assertEqual(self.repo.events[-1]["event_type"], "claimed_by_manager")
+
+    def test_record_manager_reply_allows_expired_owner_and_reassigns(self) -> None:
+        self.snapshot.owner_claimed_at = datetime.now(timezone.utc) - timedelta(hours=3)
+
+        snapshot = self.service.record_manager_reply(
+            conversation_id=3,
+            manager_name="Bob",
+            operator_id="bob",
+            text="Reply after stale ownership",
+            pause_ai=True,
+        )
+
+        self.assertEqual(snapshot.owner_id, "bob")
+        self.assertEqual(snapshot.owner_name, "Bob")
+        self.assertEqual(self.repo.events[-2]["event_type"], "lock_expired")
+        self.assertEqual(self.repo.events[-1]["event_type"], "manager_reply")
 
     def test_release_conversation_clears_owner(self) -> None:
         snapshot = self.service.release_conversation(

@@ -298,8 +298,35 @@ def _collect_resolution_episodes(
 
 
 class SalesBotService:
-    def __init__(self, repository: RepositoryProtocol) -> None:
+    def __init__(self, repository: RepositoryProtocol, *, owner_ttl_minutes: int = 120) -> None:
         self.repository = repository
+        self.owner_ttl_minutes = max(1, int(owner_ttl_minutes))
+
+    def ownership_is_expired(self, snapshot: ConversationSnapshot, *, now: datetime | None = None) -> bool:
+        owner_claimed_at = snapshot.owner_claimed_at
+        if owner_claimed_at is None:
+            return False
+        has_owner = bool(snapshot.owner_id.strip() or snapshot.owner_name.strip())
+        if not has_owner:
+            return False
+        current_time = now or _utcnow()
+        return owner_claimed_at + timedelta(minutes=self.owner_ttl_minutes) <= current_time
+
+    def _record_expired_ownership(self, snapshot: ConversationSnapshot, *, actor: str, operator_id: str = "") -> None:
+        if not self.ownership_is_expired(snapshot):
+            return
+        self.repository.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="lock_expired",
+            actor=actor,
+            payload={
+                "operator_id": operator_id,
+                "previous_owner_id": snapshot.owner_id,
+                "previous_owner_name": snapshot.owner_name,
+                "owner_claimed_at": snapshot.owner_claimed_at.isoformat() if snapshot.owner_claimed_at else "",
+                "ttl_minutes": self.owner_ttl_minutes,
+            },
+        )
 
     def ingest_inbound_message(self, message: InboundMessage) -> ConversationSnapshot:
         snapshot = self.repository.ingest_customer_message(message)
@@ -353,20 +380,27 @@ class SalesBotService:
         snapshot = self.repository.get_snapshot(conversation_id)
         owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
-        if pause_ai and owner_id and operator_id and owner_id != operator_id:
+        ownership_expired = self.ownership_is_expired(snapshot)
+        if pause_ai and owner_id and operator_id and owner_id != operator_id and not ownership_expired:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name or owner_id}"
             )
-        if pause_ai and not owner_id and owner_name and owner_name != manager_name:
+        if pause_ai and not owner_id and owner_name and owner_name != manager_name and not ownership_expired:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
         if pause_ai:
+            if ownership_expired:
+                self._record_expired_ownership(
+                    snapshot,
+                    actor=manager_name,
+                    operator_id=operator_id,
+                )
             self.repository.update_conversation_state(
                 conversation_id=conversation_id,
                 mode=ConversationMode.MANAGER,
                 status=ConversationStatus.IN_PROGRESS,
-                owner_id=operator_id or owner_id or manager_name,
+                owner_id=operator_id or ("" if ownership_expired else owner_id) or manager_name,
                 owner_name=manager_name,
                 owner_claimed_at=_utcnow(),
                 needs_attention=False,
@@ -520,25 +554,32 @@ class SalesBotService:
         snapshot = self.repository.get_snapshot(conversation_id)
         existing_owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
+        ownership_expired = self.ownership_is_expired(snapshot)
         forced_reassign = False
-        if existing_owner_id and operator_id and existing_owner_id != operator_id and not force:
+        if existing_owner_id and operator_id and existing_owner_id != operator_id and not force and not ownership_expired:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name or existing_owner_id}"
             )
-        if not existing_owner_id and owner_name and owner_name != operator_name and not force:
+        if not existing_owner_id and owner_name and owner_name != operator_name and not force and not ownership_expired:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
-        if force and (
+        if force and not ownership_expired and (
             (existing_owner_id and operator_id and existing_owner_id != operator_id)
             or (not existing_owner_id and owner_name and owner_name != operator_name)
         ):
             forced_reassign = True
+        if ownership_expired:
+            self._record_expired_ownership(
+                snapshot,
+                actor=operator_name,
+                operator_id=operator_id,
+            )
         self.repository.update_conversation_state(
             conversation_id=conversation_id,
             mode=ConversationMode.MANAGER,
             status=ConversationStatus.IN_PROGRESS,
-            owner_id=operator_id or existing_owner_id or operator_name,
+            owner_id=operator_id or ("" if ownership_expired else existing_owner_id) or operator_name,
             owner_name=operator_name,
             owner_claimed_at=_utcnow(),
             needs_attention=False,

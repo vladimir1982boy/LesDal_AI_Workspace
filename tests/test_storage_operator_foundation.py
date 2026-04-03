@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -60,6 +61,23 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
         self.assertEqual(updated.priority.value, "normal")
 
+    def test_sqlite_can_roundtrip_owner_claimed_at(self) -> None:
+        repo = SQLiteLeadRepository(self.sqlite_path)
+        snapshot = self._ingest(repo)
+        claimed_at = datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)
+
+        repo.update_conversation_state(
+            conversation_id=snapshot.conversation_id,
+            owner_id="alice",
+            owner_name="Alice",
+            owner_claimed_at=claimed_at,
+        )
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.owner_id, "alice")
+        self.assertEqual(updated.owner_name, "Alice")
+        self.assertEqual(updated.owner_claimed_at, claimed_at)
+
     def test_json_can_persist_manager_notes(self) -> None:
         repo = JSONLeadRepository(self.json_path)
         snapshot = self._ingest(repo)
@@ -68,6 +86,23 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         updated = repo.get_snapshot(snapshot.conversation_id)
 
         self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
+
+    def test_json_can_roundtrip_owner_claimed_at(self) -> None:
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = self._ingest(repo)
+        claimed_at = datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)
+
+        repo.update_conversation_state(
+            conversation_id=snapshot.conversation_id,
+            owner_id="alice",
+            owner_name="Alice",
+            owner_claimed_at=claimed_at,
+        )
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.owner_id, "alice")
+        self.assertEqual(updated.owner_name, "Alice")
+        self.assertEqual(updated.owner_claimed_at, claimed_at)
 
     def test_sqlite_can_persist_kpi_fields(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)
