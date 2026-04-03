@@ -5,9 +5,10 @@ from datetime import datetime
 from typing import Any
 
 from .app import SalesBotRuntime, create_runtime
-from .domain import Channel, ConversationMode, ConversationSnapshot
+from .domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus
 from .lead_sync import LeadSyncCoordinator
 from .outbound import OutboundDispatcher
+from .services import ConversationOwnershipError
 
 
 def _serialize_value(value: Any) -> Any:
@@ -46,8 +47,26 @@ class OperatorInboxAPI:
             service=self.service,
         )
 
-    def list_conversations(self, *, limit: int = 50) -> list[dict[str, Any]]:
-        rows = self.service.list_recent_conversations(limit=limit)
+    def list_conversations(
+        self,
+        *,
+        limit: int = 50,
+        channel: str = "",
+        mode: str = "",
+        status: str = "",
+        owner: str = "",
+        q: str = "",
+        needs_attention: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        rows = self.service.list_recent_conversations(
+            limit=limit,
+            channel=channel,
+            mode=mode,
+            status=status,
+            owner=owner,
+            q=q,
+            needs_attention=needs_attention,
+        )
         return [
             {
                 key: _serialize_value(value)
@@ -86,9 +105,29 @@ class OperatorInboxAPI:
         }
 
     def pause_conversation(self, conversation_id: int) -> OperatorActionResult:
-        snapshot = self.service.set_conversation_mode(
+        claim_method = getattr(self.service, "claim_conversation", None)
+        if callable(claim_method):
+            snapshot = claim_method(
+                conversation_id=conversation_id,
+                operator_name=self.config.manager_name,
+            )
+        else:
+            snapshot = self.service.set_conversation_mode(
+                conversation_id=conversation_id,
+                mode=ConversationMode.MANAGER,
+            )
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(snapshot=snapshot)
+
+    def claim_conversation(
+        self,
+        conversation_id: int,
+        *,
+        operator_name: str,
+    ) -> OperatorActionResult:
+        snapshot = self.service.claim_conversation(
             conversation_id=conversation_id,
-            mode=ConversationMode.MANAGER,
+            operator_name=operator_name,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)
@@ -116,6 +155,7 @@ class OperatorInboxAPI:
         *,
         text: str,
         pause_ai: bool = True,
+        operator_name: str | None = None,
     ) -> OperatorActionResult:
         target = self.service.get_conversation_target(conversation_id)
         outbound_sent = self.dispatcher.send_text(
@@ -126,9 +166,24 @@ class OperatorInboxAPI:
         )
         snapshot = self.service.record_manager_reply(
             conversation_id=conversation_id,
-            manager_name=self.config.manager_name,
+            manager_name=operator_name or self.config.manager_name,
             text=text,
             pause_ai=pause_ai,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot, outbound_sent=outbound_sent)
+
+    def set_status(
+        self,
+        conversation_id: int,
+        *,
+        status: str,
+        operator_name: str = "",
+    ) -> OperatorActionResult:
+        snapshot = self.service.set_conversation_status(
+            conversation_id=conversation_id,
+            status=ConversationStatus(status),
+            actor=operator_name,
+        )
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(snapshot=snapshot)

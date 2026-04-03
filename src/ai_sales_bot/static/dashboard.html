@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
@@ -14,6 +14,7 @@
       --accent: #2f6b52;
       --accent-soft: #d8eadf;
       --warn: #a04a2d;
+      --danger: #b84d35;
       --line: #dfd0bd;
       --shadow: 0 18px 40px rgba(43, 35, 28, 0.08);
       --radius: 20px;
@@ -31,7 +32,7 @@
     }
     .app {
       display: grid;
-      grid-template-columns: 380px 1fr;
+      grid-template-columns: 390px 1fr;
       min-height: 100vh;
       gap: 18px;
       padding: 18px;
@@ -60,12 +61,22 @@
       color: var(--muted);
       font-size: 14px;
     }
+    .filters {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
     .conversation-list {
       padding: 10px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: calc(100vh - 150px);
+      max-height: calc(100vh - 310px);
       overflow: auto;
     }
     .conversation-item {
@@ -85,7 +96,7 @@
       border-color: var(--accent);
       background: #f3fbf6;
     }
-    .item-top, .meta-row, .mode-row {
+    .item-top, .meta-row, .owner-row {
       display: flex;
       justify-content: space-between;
       gap: 10px;
@@ -115,6 +126,19 @@
     .badge.mode-ai { background: var(--accent-soft); color: var(--accent); }
     .badge.mode-manager { background: #f9dfd7; color: var(--warn); }
     .badge.stage { background: #ede7ff; color: #5f468b; }
+    .badge.status-new { background: #ece4d6; color: #6a5138; }
+    .badge.status-in_progress { background: #dff0e6; color: #2f6b52; }
+    .badge.status-waiting_manager { background: #ffe0d6; color: var(--danger); }
+    .badge.status-closed { background: #ececec; color: #666; }
+    .badge.owner { background: #eef0ff; color: #46508b; }
+    .attention-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgba(184, 77, 53, 0.14);
+      flex: 0 0 auto;
+    }
     .content {
       display: grid;
       grid-template-rows: auto 1fr auto;
@@ -122,7 +146,7 @@
     }
     .content-body {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
+      grid-template-columns: minmax(0, 1fr) 340px;
       gap: 18px;
       padding: 18px;
       min-height: 0;
@@ -139,7 +163,7 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
-      max-height: calc(100vh - 270px);
+      max-height: calc(100vh - 320px);
       overflow: auto;
     }
     .message {
@@ -163,7 +187,7 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      max-height: calc(100vh - 270px);
+      max-height: calc(100vh - 320px);
       overflow: auto;
     }
     .detail-block {
@@ -179,6 +203,19 @@
       letter-spacing: 0.06em;
       margin-bottom: 6px;
     }
+    .event-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .event-row {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      line-height: 1.35;
+    }
     .composer {
       border-top: 1px solid var(--line);
       padding: 18px;
@@ -186,21 +223,26 @@
       gap: 12px;
       background: linear-gradient(180deg, rgba(255, 250, 242, 0.75), rgba(255, 250, 242, 1));
     }
-    .actions {
+    .actions, .status-actions {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
     }
-    textarea {
+    textarea, input, select {
       width: 100%;
-      min-height: 110px;
-      resize: vertical;
-      border-radius: 16px;
+      border-radius: 14px;
       border: 1px solid var(--line);
-      padding: 14px 16px;
+      padding: 11px 13px;
       font: inherit;
       color: var(--ink);
       background: white;
+    }
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      border-radius: 16px;
+      padding: 14px 16px;
     }
     button {
       border: 0;
@@ -215,6 +257,7 @@
     button.primary { background: var(--accent); color: white; }
     button.secondary { background: #eadbc8; color: #5b4534; }
     button.warn { background: #d56d49; color: white; }
+    button.ghost { background: #f2ece2; color: #5e5348; }
     .status {
       font-size: 13px;
       color: var(--muted);
@@ -231,6 +274,7 @@
       .app { grid-template-columns: 1fr; }
       .content-body { grid-template-columns: 1fr; }
       .conversation-list { max-height: 320px; }
+      .filter-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -240,6 +284,35 @@
       <div class="sidebar-header">
         <h1 class="title">LesDal Inbox</h1>
         <p class="subtitle">Единое окно для текущих диалогов из Telegram, VK и MAX</p>
+        <div class="filters">
+          <input id="operatorName" placeholder="Оператор" />
+          <input id="searchInput" placeholder="Поиск по имени, summary или chat id" />
+          <div class="filter-grid">
+            <select id="channelFilter">
+              <option value="">Все каналы</option>
+              <option value="telegram">Telegram</option>
+              <option value="vk">VK</option>
+              <option value="max">MAX</option>
+            </select>
+            <select id="modeFilter">
+              <option value="">Все режимы</option>
+              <option value="ai">AI</option>
+              <option value="manager">Manager</option>
+            </select>
+            <select id="statusFilter">
+              <option value="">Все статусы</option>
+              <option value="new">new</option>
+              <option value="in_progress">in_progress</option>
+              <option value="waiting_manager">waiting_manager</option>
+              <option value="closed">closed</option>
+            </select>
+            <select id="attentionFilter">
+              <option value="">Любое внимание</option>
+              <option value="true">Нужна реакция</option>
+              <option value="false">Без тревоги</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div id="conversationList" class="conversation-list"></div>
     </aside>
@@ -247,7 +320,7 @@
     <main class="panel content">
       <div class="content-header">
         <h2 id="contentTitle" class="title">Диалог не выбран</h2>
-        <p id="contentSubtitle" class="subtitle">Выберите разговор слева, чтобы открыть историю и перехватить инициативу.</p>
+        <p id="contentSubtitle" class="subtitle">Выберите разговор слева, чтобы открыть историю и взять диалог в работу.</p>
       </div>
 
       <div class="content-body">
@@ -266,18 +339,28 @@
 
       <div class="composer">
         <div class="actions">
-          <button id="pauseButton" class="secondary" disabled>Перехватить</button>
+          <button id="claimButton" class="secondary" disabled>Перехватить</button>
           <button id="resumeButton" class="warn" disabled>Вернуть AI</button>
           <button id="replyButton" class="primary" disabled>Отправить ответ</button>
         </div>
+        <div class="status-actions">
+          <select id="statusSelect" disabled>
+            <option value="new">new</option>
+            <option value="in_progress">in_progress</option>
+            <option value="waiting_manager">waiting_manager</option>
+            <option value="closed">closed</option>
+          </select>
+          <button id="statusButton" class="ghost" disabled>Обновить статус</button>
+        </div>
         <textarea id="replyText" placeholder="Сообщение менеджера клиенту..." disabled></textarea>
-        <div id="statusLine" class="status">Dashboard готов. Обновление списка выполняется автоматически.</div>
+        <div id="statusLine" class="status">Dashboard готов. Список обновляется автоматически.</div>
       </div>
     </main>
   </div>
 
   <script>
     const authToken = new URLSearchParams(window.location.search).get("token") || "";
+    const operatorStorageKey = "lesdal.operator_name";
     const state = {
       conversations: [],
       selectedId: null,
@@ -292,13 +375,38 @@
       subtitle: document.getElementById("contentSubtitle"),
       replyText: document.getElementById("replyText"),
       replyButton: document.getElementById("replyButton"),
-      pauseButton: document.getElementById("pauseButton"),
+      claimButton: document.getElementById("claimButton"),
       resumeButton: document.getElementById("resumeButton"),
+      statusSelect: document.getElementById("statusSelect"),
+      statusButton: document.getElementById("statusButton"),
       status: document.getElementById("statusLine"),
+      operatorName: document.getElementById("operatorName"),
+      searchInput: document.getElementById("searchInput"),
+      channelFilter: document.getElementById("channelFilter"),
+      modeFilter: document.getElementById("modeFilter"),
+      statusFilter: document.getElementById("statusFilter"),
+      attentionFilter: document.getElementById("attentionFilter"),
     };
+
+    el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
 
     function authHeaders(extra = {}) {
       return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
+    }
+
+    function currentOperator() {
+      return (el.operatorName.value || "Vladimir").trim();
+    }
+
+    function filtersQuery() {
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (el.channelFilter.value) params.set("channel", el.channelFilter.value);
+      if (el.modeFilter.value) params.set("mode", el.modeFilter.value);
+      if (el.statusFilter.value) params.set("status", el.statusFilter.value);
+      if (el.searchInput.value.trim()) params.set("q", el.searchInput.value.trim());
+      if (el.attentionFilter.value) params.set("needs_attention", el.attentionFilter.value);
+      return params.toString();
     }
 
     async function apiFetch(path, options = {}) {
@@ -317,33 +425,47 @@
     }
 
     function modeBadge(mode) {
-      return `<span class="badge mode-${mode === "manager" ? "manager" : "ai"}">${mode}</span>`;
+      return `<span class="badge mode-${mode === "manager" ? "manager" : "ai"}">${escapeHtml(mode)}</span>`;
     }
 
     function channelBadge(channel) {
-      return `<span class="badge channel">${channel}</span>`;
+      return `<span class="badge channel">${escapeHtml(channel)}</span>`;
     }
 
     function stageBadge(stage) {
-      return `<span class="badge stage">${stage}</span>`;
+      return `<span class="badge stage">${escapeHtml(stage)}</span>`;
+    }
+
+    function statusBadge(status) {
+      return `<span class="badge status-${escapeHtml(status)}">${escapeHtml(status)}</span>`;
+    }
+
+    function ownerBadge(owner) {
+      if (!owner) return "";
+      return `<span class="badge owner">${escapeHtml(owner)}</span>`;
     }
 
     function renderConversations() {
       if (!state.conversations.length) {
-        el.list.innerHTML = `<div class="empty">Диалоги пока не появились.</div>`;
+        el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
         return;
       }
       el.list.innerHTML = state.conversations.map((item) => `
         <article class="conversation-item ${item.id === state.selectedId ? "active" : ""}" data-id="${item.id}">
           <div class="item-top">
             <div class="item-name">${escapeHtml(item.display_name || item.username || `Диалог ${item.id}`)}</div>
-            ${channelBadge(item.channel)}
+            <div style="display:flex; gap:8px; align-items:center;">${item.needs_attention ? '<span class="attention-dot"></span>' : ''}${channelBadge(item.channel)}</div>
           </div>
-          <div class="meta-row" style="margin-top:10px">
+          <div class="meta-row" style="margin-top:10px; flex-wrap:wrap;">
             ${stageBadge(item.stage)}
-            <span class="badge ${item.mode === "manager" ? "mode-manager" : "mode-ai"}">${item.mode}</span>
+            ${modeBadge(item.mode)}
+            ${statusBadge(item.status || 'new')}
           </div>
-          <div class="item-summary">${escapeHtml(item.summary || "Без summary, менеджер может открыть переписку и взять диалог вручную.")}</div>
+          <div class="owner-row" style="margin-top:10px;">
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${ownerBadge(item.owner_name || '')}</div>
+            <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || '')}</div>
+          </div>
+          <div class="item-summary">${escapeHtml(item.summary || 'Без summary, менеджер может открыть переписку и взять диалог в работу.')}</div>
         </article>
       `).join("");
 
@@ -353,13 +475,13 @@
     }
 
     function renderThread() {
-      const transcript = state.detail?.transcript || [];
+      const transcript = [...(state.detail?.transcript || [])].reverse();
       if (!transcript.length) {
         el.thread.innerHTML = `<div class="empty">В этом диалоге пока нет истории сообщений.</div>`;
         return;
       }
       el.thread.innerHTML = transcript.map((row) => `
-        <div class="message ${row.sender_role}">
+        <div class="message ${escapeHtml(row.sender_role || 'system')}">
           <div class="message-meta">${escapeHtml(row.sender_name || row.sender_role || "unknown")} · ${escapeHtml(row.created_at || "")}</div>
           ${escapeHtml(row.text || "")}
         </div>
@@ -369,6 +491,7 @@
 
     function renderDetails() {
       const snapshot = state.detail?.snapshot;
+      const events = state.detail?.events || [];
       if (!snapshot) {
         el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
         return;
@@ -378,15 +501,18 @@
         <div class="detail-block">
           <div class="detail-label">Клиент</div>
           <div>${escapeHtml(snapshot.display_name || "Без имени")}</div>
-          <div style="color:var(--muted); margin-top:6px">@${escapeHtml(snapshot.username || "-")}</div>
+          <div style="color:var(--muted); margin-top:6px;">@${escapeHtml(snapshot.username || "-")}</div>
         </div>
         <div class="detail-block">
-          <div class="detail-label">Статус</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <div class="detail-label">Workflow</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
             ${channelBadge(snapshot.channel)}
             ${modeBadge(snapshot.mode)}
+            ${statusBadge(snapshot.status || 'new')}
             ${stageBadge(snapshot.stage)}
           </div>
+          <div style="font-size:13px; color:var(--muted);">Owner: ${escapeHtml(snapshot.owner_name || "-")}</div>
+          <div style="font-size:13px; color:var(--muted);">Needs attention: ${snapshot.needs_attention ? 'yes' : 'no'}</div>
         </div>
         <div class="detail-block">
           <div class="detail-label">Товары</div>
@@ -400,6 +526,17 @@
           <div class="detail-label">Summary</div>
           <div>${escapeHtml(summary)}</div>
         </div>
+        <div class="detail-block">
+          <div class="detail-label">Журнал событий</div>
+          <div class="event-list">
+            ${events.length ? events.map((row) => `
+              <div class="event-row">
+                <div><strong>${escapeHtml(row.event_type || 'event')}</strong></div>
+                <div style="color:var(--muted); margin-top:4px;">${escapeHtml(row.actor || '-')} · ${escapeHtml(row.created_at || '')}</div>
+              </div>
+            `).join("") : '<div style="color:var(--muted);">Событий пока нет.</div>'}
+          </div>
+        </div>
       `;
     }
 
@@ -407,20 +544,27 @@
       const snapshot = state.detail?.snapshot;
       if (!snapshot) {
         el.title.textContent = "Диалог не выбран";
-        el.subtitle.textContent = "Выберите разговор слева, чтобы открыть историю и перехватить инициативу.";
+        el.subtitle.textContent = "Выберите разговор слева, чтобы открыть историю и взять диалог в работу.";
         return;
       }
       el.title.textContent = `${snapshot.display_name || snapshot.username || `Диалог ${snapshot.conversation_id}`}`;
-      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · режим ${snapshot.mode} · стадия ${snapshot.stage}`;
+      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · mode ${snapshot.mode} · status ${snapshot.status} · owner ${snapshot.owner_name || '-'}`;
     }
 
     function renderComposer() {
       const snapshot = state.detail?.snapshot;
       const enabled = Boolean(snapshot);
-      el.replyText.disabled = !enabled;
-      el.replyButton.disabled = !enabled;
-      el.pauseButton.disabled = !enabled || snapshot.mode === "manager";
+      const operator = currentOperator();
+      const ownedByOther = Boolean(snapshot && snapshot.owner_name && snapshot.owner_name !== operator);
+      el.replyText.disabled = !enabled || ownedByOther;
+      el.replyButton.disabled = !enabled || ownedByOther;
+      el.claimButton.disabled = !enabled || snapshot.mode === "manager" && snapshot.owner_name === operator;
       el.resumeButton.disabled = !enabled || snapshot.mode === "ai";
+      el.statusSelect.disabled = !enabled;
+      el.statusButton.disabled = !enabled;
+      if (snapshot) {
+        el.statusSelect.value = snapshot.status || "new";
+      }
     }
 
     function escapeHtml(value) {
@@ -431,7 +575,7 @@
     }
 
     async function refreshConversations() {
-      const payload = await apiFetch("/api/conversations?limit=50");
+      const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
       renderConversations();
     }
@@ -460,24 +604,52 @@
       el.status.textContent = "Действие выполнено.";
     }
 
-    el.pauseButton.addEventListener("click", () => postAction("pause"));
+    async function applyFilters() {
+      await refreshConversations();
+      if (state.selectedId && state.conversations.some((item) => item.id === state.selectedId)) {
+        await openConversation(state.selectedId);
+      } else if (state.conversations.length) {
+        await openConversation(state.conversations[0].id);
+      } else {
+        state.selectedId = null;
+        state.detail = null;
+        renderHeader();
+        renderThread();
+        renderDetails();
+        renderComposer();
+      }
+    }
+
+    el.operatorName.addEventListener("change", () => {
+      localStorage.setItem(operatorStorageKey, currentOperator());
+    });
+    [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter].forEach((node) => {
+      node.addEventListener("change", applyFilters);
+      if (node === el.searchInput) {
+        node.addEventListener("keyup", async (event) => {
+          if (event.key === "Enter") {
+            await applyFilters();
+          }
+        });
+      }
+    });
+
+    el.claimButton.addEventListener("click", () => postAction("claim", { operator_name: currentOperator() }));
     el.resumeButton.addEventListener("click", () => postAction("resume"));
+    el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value, operator_name: currentOperator() }));
     el.replyButton.addEventListener("click", async () => {
       const text = el.replyText.value.trim();
       if (!text) {
         el.status.textContent = "Введите текст ответа менеджера.";
         return;
       }
-      await postAction("reply", { text, pause_ai: true });
+      await postAction("reply", { text, pause_ai: true, operator_name: currentOperator() });
       el.replyText.value = "";
     });
 
     async function boot() {
       try {
-        await refreshConversations();
-        if (state.conversations.length) {
-          await openConversation(state.selectedId || state.conversations[0].id);
-        }
+        await applyFilters();
       } catch (error) {
         el.status.textContent = `Ошибка загрузки: ${error.message}`;
       }

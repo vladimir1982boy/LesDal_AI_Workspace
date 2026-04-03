@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .app import SalesBotRuntime, create_runtime
 from .operator_api import OperatorInboxAPI
+from .services import ConversationOwnershipError
 
 
 logger = logging.getLogger("lesdal.ai_sales.dashboard")
@@ -36,7 +37,19 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 return
             if parsed.path == "/api/conversations":
                 limit = self._query_int(parsed.query, "limit", default=50)
-                self._send_json({"items": api.list_conversations(limit=limit)})
+                self._send_json(
+                    {
+                        "items": api.list_conversations(
+                            limit=limit,
+                            channel=self._query_str(parsed.query, "channel"),
+                            mode=self._query_str(parsed.query, "mode"),
+                            status=self._query_str(parsed.query, "status"),
+                            owner=self._query_str(parsed.query, "owner"),
+                            q=self._query_str(parsed.query, "q"),
+                            needs_attention=self._query_bool(parsed.query, "needs_attention"),
+                        )
+                    }
+                )
                 return
             if parsed.path.startswith("/api/conversations/"):
                 conversation_id, action = self._conversation_route(parsed.path)
@@ -74,6 +87,22 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     )
                     return
 
+                if action == "claim":
+                    payload = self._read_json()
+                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
+                    result = api.claim_conversation(
+                        conversation_id,
+                        operator_name=operator_name or api.config.manager_name,
+                    )
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
+                            "outbound_sent": result.outbound_sent,
+                        }
+                    )
+                    return
+
                 if action == "resume":
                     result = api.resume_conversation(conversation_id)
                     self._send_json(
@@ -89,6 +118,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     payload = self._read_json()
                     text = str(payload.get("text") or "").strip()
                     pause_ai = bool(payload.get("pause_ai", True))
+                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
                     if not text:
                         self._send_json({"error": "Text is required"}, status=HTTPStatus.BAD_REQUEST)
                         return
@@ -96,6 +126,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         conversation_id,
                         text=text,
                         pause_ai=pause_ai,
+                        operator_name=operator_name or api.config.manager_name,
                     )
                     self._send_json(
                         {
@@ -105,6 +136,30 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         }
                     )
                     return
+
+                if action == "status":
+                    payload = self._read_json()
+                    status = str(payload.get("status") or "").strip()
+                    operator_name = str(payload.get("operator_name") or "").strip()
+                    if not status:
+                        self._send_json({"error": "Status is required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    result = api.set_status(
+                        conversation_id,
+                        status=status,
+                        operator_name=operator_name,
+                    )
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
+                            "outbound_sent": result.outbound_sent,
+                        }
+                    )
+                    return
+            except ConversationOwnershipError as exc:
+                self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+                return
             except Exception as exc:
                 logger.exception("Dashboard action failed")
                 self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -176,6 +231,17 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 return int(raw)
             except (TypeError, ValueError):
                 return default
+
+        def _query_str(self, query: str, key: str) -> str:
+            return str(parse_qs(query).get(key, [""])[0] or "").strip()
+
+        def _query_bool(self, query: str, key: str) -> bool | None:
+            raw = self._query_str(query, key).lower()
+            if raw in {"1", "true", "yes"}:
+                return True
+            if raw in {"0", "false", "no"}:
+                return False
+            return None
 
     return DashboardHandler
 

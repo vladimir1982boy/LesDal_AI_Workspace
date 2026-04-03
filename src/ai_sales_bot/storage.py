@@ -465,24 +465,72 @@ class SQLiteLeadRepository:
             )
 
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None:
+        self.update_conversation_state(
+            conversation_id=conversation_id,
+            mode=mode,
+        )
+
+    def update_conversation_state(
+        self,
+        *,
+        conversation_id: int,
+        mode: ConversationMode | None = None,
+        status: ConversationStatus | None = None,
+        owner_name: str | None = None,
+        owner_claimed_at: datetime | None = None,
+        clear_owner: bool = False,
+        needs_attention: bool | None = None,
+    ) -> None:
         now = _utcnow_iso()
+        updates: list[str] = []
+        params: list[object] = []
+
+        if mode is not None:
+            updates.append("mode = ?")
+            params.append(mode.value)
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status.value)
+        if clear_owner:
+            updates.append("owner_name = ?")
+            updates.append("owner_claimed_at = ?")
+            params.extend(["", None])
+        else:
+            if owner_name is not None:
+                updates.append("owner_name = ?")
+                params.append(owner_name)
+            if owner_claimed_at is not None:
+                updates.append("owner_claimed_at = ?")
+                params.append(owner_claimed_at.isoformat())
+        if needs_attention is not None:
+            updates.append("needs_attention = ?")
+            params.append(1 if needs_attention else 0)
+
+        if not updates:
+            return
+
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(conversation_id)
+
         with self._connect() as conn:
             conn.execute(
-                """
+                f"""
                 UPDATE conversations
-                SET mode = ?, updated_at = ?
+                SET {', '.join(updates)}
                 WHERE id = ?
                 """,
-                (mode.value, now, conversation_id),
+                params,
             )
-            conn.execute(
-                """
-                UPDATE leads
-                SET mode = ?, updated_at = ?
-                WHERE contact_id = (SELECT contact_id FROM conversations WHERE id = ?)
-                """,
-                (mode.value, now, conversation_id),
-            )
+            if mode is not None:
+                conn.execute(
+                    """
+                    UPDATE leads
+                    SET mode = ?, updated_at = ?
+                    WHERE contact_id = (SELECT contact_id FROM conversations WHERE id = ?)
+                    """,
+                    (mode.value, now, conversation_id),
+                )
 
     def ingest_customer_message(self, message: InboundMessage) -> ConversationSnapshot:
         contact_id = self.ensure_contact(
@@ -952,16 +1000,46 @@ class JSONLeadRepository:
         self._save(data)
 
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None:
+        self.update_conversation_state(
+            conversation_id=conversation_id,
+            mode=mode,
+        )
+
+    def update_conversation_state(
+        self,
+        *,
+        conversation_id: int,
+        mode: ConversationMode | None = None,
+        status: ConversationStatus | None = None,
+        owner_name: str | None = None,
+        owner_claimed_at: datetime | None = None,
+        clear_owner: bool = False,
+        needs_attention: bool | None = None,
+    ) -> None:
         data = self._load()
         now = _utcnow_iso()
         contact_id = None
         for conversation in data["conversations"]:
-            if int(conversation["id"]) == conversation_id:
+            if int(conversation["id"]) != conversation_id:
+                continue
+            if mode is not None:
                 conversation["mode"] = mode.value
-                conversation["updated_at"] = now
-                contact_id = int(conversation["contact_id"])
-                break
-        if contact_id is not None:
+            if status is not None:
+                conversation["status"] = status.value
+            if clear_owner:
+                conversation["owner_name"] = ""
+                conversation["owner_claimed_at"] = None
+            else:
+                if owner_name is not None:
+                    conversation["owner_name"] = owner_name
+                if owner_claimed_at is not None:
+                    conversation["owner_claimed_at"] = owner_claimed_at.isoformat()
+            if needs_attention is not None:
+                conversation["needs_attention"] = bool(needs_attention)
+            conversation["updated_at"] = now
+            contact_id = int(conversation["contact_id"])
+            break
+        if contact_id is not None and mode is not None:
             for lead in data["leads"]:
                 if int(lead["contact_id"]) == contact_id:
                     lead["mode"] = mode.value
