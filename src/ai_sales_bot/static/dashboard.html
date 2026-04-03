@@ -754,9 +754,17 @@
       return state.operator?.operator_id || "";
     }
 
+    function currentOperatorRole() {
+      return state.operator?.role || "manager";
+    }
+
+    function canForceTakeover() {
+      return Boolean(state.operator?.can_force_takeover || currentOperatorRole() === "supervisor");
+    }
+
     function renderOperatorSelect() {
       const options = state.operators.length
-        ? state.operators.map((item) => `<option value="${escapeAttr(item.operator_id)}">${escapeHtml(item.display_name)}</option>`).join("")
+        ? state.operators.map((item) => `<option value="${escapeAttr(item.operator_id)}">${escapeHtml(item.display_name)} · ${escapeHtml(item.role || "manager")}</option>`).join("")
         : `<option value="">Операторы не настроены</option>`;
       el.operatorSelect.innerHTML = options;
       if (state.operator?.operator_id) {
@@ -778,7 +786,7 @@
       renderOperatorSelect();
       const online = Boolean(state.operator);
       el.operatorStatusPill.textContent = online
-        ? `Оператор: ${state.operator.display_name}`
+        ? `Оператор: ${state.operator.display_name} · ${state.operator.role || "manager"}`
         : "Оператор не авторизован";
       el.operatorStatusPill.classList.toggle("offline", !online);
       el.loginButton.disabled = !state.operators.length;
@@ -915,6 +923,11 @@
     function ownerBadge(owner) {
       if (!owner) return "";
       return `<span class="badge owner">${escapeHtml(owner)}</span>`;
+    }
+
+    function roleBadge(role) {
+      const normalized = String(role || "manager");
+      return `<span class="badge owner">${escapeHtml(normalized)}</span>`;
     }
 
     function priorityBadge(priority) {
@@ -1238,13 +1251,19 @@
         return "";
       }
       const operatorId = currentOperatorId();
+      const supervisor = canForceTakeover();
       const ownerId = String(item.owner_id || "").trim();
       const owner = String(item.owner_name || "").trim();
       const ownedByMe = ownerId ? ownerId === operatorId : owner && owner === currentOperator();
       const ownedByOther = ownerId ? ownerId !== operatorId : owner && owner !== currentOperator();
       const actions = [];
       if (ownedByOther) {
-        return `<div class="card-lock">Закреплено за ${escapeHtml(owner || ownerId)}</div>`;
+        return `
+          <div class="card-lock">
+            Закреплено за ${escapeHtml(owner || ownerId)}
+            ${supervisor ? '<div style="margin-top:8px;"><button class="mini-warn quick-action" data-id="' + item.id + '" data-action="force-claim">Забрать принудительно</button></div>' : ''}
+          </div>
+        `;
       }
       if (!ownedByMe && item.status !== "closed") {
         actions.push(`<button class="mini-primary quick-action" data-id="${item.id}" data-action="claim">Перехватить</button>`);
@@ -1502,6 +1521,7 @@
           </div>
           <div style="font-size:13px; color:var(--muted);">Owner: ${escapeHtml(snapshot.owner_name || "-")}${snapshot.owner_id ? ` · ${escapeHtml(snapshot.owner_id)}` : ""}</div>
           <div style="font-size:13px; color:var(--muted);">Needs attention: ${snapshot.needs_attention ? 'yes' : 'no'}</div>
+          <div style="font-size:13px; color:var(--muted);">Ваш доступ: ${escapeHtml(currentOperatorRole())}${canForceTakeover() ? " · можно принудительно перехватывать" : " · чужие диалоги доступны только для просмотра"}</div>
         </div>
         <div class="detail-block">
           <div class="detail-label">Lead card</div>
@@ -1641,6 +1661,7 @@
       const enabled = Boolean(snapshot && state.operator);
       const operatorId = currentOperatorId();
       const operator = currentOperator();
+      const supervisor = canForceTakeover();
       const ownedByOther = Boolean(
         snapshot && (
           snapshot.owner_id
@@ -1657,11 +1678,12 @@
       );
       el.replyText.disabled = !enabled || ownedByOther;
       el.replyButton.disabled = !enabled || ownedByOther;
-      el.claimButton.disabled = !enabled || ownedByMe;
+      el.claimButton.disabled = !enabled || ownedByMe || (ownedByOther && !supervisor);
       el.releaseButton.disabled = !enabled || !ownedByMe;
-      el.resumeButton.disabled = !enabled || snapshot.mode === "ai";
-      el.statusSelect.disabled = !enabled;
-      el.statusButton.disabled = !enabled;
+      el.resumeButton.disabled = !enabled || ownedByOther || snapshot.mode === "ai";
+      el.statusSelect.disabled = !enabled || ownedByOther;
+      el.statusButton.disabled = !enabled || ownedByOther;
+      el.claimButton.textContent = ownedByOther && supervisor ? "Забрать принудительно" : "Перехватить";
       if (snapshot) {
         el.statusSelect.value = snapshot.status || "new";
       }
@@ -1734,6 +1756,15 @@
           await refreshConversations();
           return false;
         }
+        if (error.status === 403) {
+          el.status.textContent = `Недостаточно прав: ${error.message}`;
+          el.status.classList.add("alert");
+          await refreshConversations();
+          if (state.selectedId) {
+            await openConversation(state.selectedId);
+          }
+          return false;
+        }
         throw error;
       }
       await refreshConversations();
@@ -1754,6 +1785,10 @@
       }
       if (action === "claim") {
         await postConversationAction(conversationId, "claim");
+        return;
+      }
+      if (action === "force-claim") {
+        await postConversationAction(conversationId, "claim", { force: true });
         return;
       }
       if (action === "release") {
@@ -1895,7 +1930,16 @@
       persistView();
       await applyFilters();
     });
-    el.claimButton.addEventListener("click", () => postAction("claim"));
+    el.claimButton.addEventListener("click", () => {
+      const snapshot = state.detail?.snapshot;
+      const force = Boolean(
+        snapshot && canForceTakeover() && (
+          (snapshot.owner_id && snapshot.owner_id !== currentOperatorId())
+          || (!snapshot.owner_id && snapshot.owner_name && snapshot.owner_name !== currentOperator())
+        )
+      );
+      postAction("claim", force ? { force: true } : {});
+    });
     el.releaseButton.addEventListener("click", () => postAction("release"));
     el.resumeButton.addEventListener("click", () => postAction("resume"));
     el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value }));

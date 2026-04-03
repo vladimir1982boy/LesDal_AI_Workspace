@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -46,12 +46,20 @@ def _repair_utf8_mojibake(value: str) -> str:
 
 def load_project_env(env_path: str | Path | None = None) -> None:
     if env_path is not None:
-        load_dotenv(env_path)
+        values = dotenv_values(env_path, encoding="utf-8-sig")
+        for key, value in values.items():
+            if key and value is not None and key not in os.environ:
+                os.environ[key] = value
+        load_dotenv(env_path, encoding="utf-8-sig")
         return
 
     for candidate in DEFAULT_ENV_FILES:
         if candidate.is_file():
-            load_dotenv(candidate)
+            values = dotenv_values(candidate, encoding="utf-8-sig")
+            for key, value in values.items():
+                if key and value is not None and key not in os.environ:
+                    os.environ[key] = value
+            load_dotenv(candidate, encoding="utf-8-sig")
 
 
 @dataclass(slots=True)
@@ -59,6 +67,16 @@ class DashboardOperator:
     operator_id: str
     display_name: str
     pin: str = ""
+    role: str = "manager"
+
+    @property
+    def can_force_takeover(self) -> bool:
+        return self.role == "supervisor"
+
+
+def _normalize_dashboard_role(raw_value: str) -> str:
+    role = str(raw_value or "manager").strip().lower()
+    return role if role in {"manager", "supervisor"} else "manager"
 
 
 def _parse_dashboard_operators(raw_value: str, *, fallback_name: str) -> tuple[DashboardOperator, ...]:
@@ -71,6 +89,7 @@ def _parse_dashboard_operators(raw_value: str, *, fallback_name: str) -> tuple[D
         operator_id = parts[0] if len(parts) > 0 else ""
         display_name = parts[1] if len(parts) > 1 and parts[1] else operator_id
         pin = parts[2] if len(parts) > 2 else ""
+        role = _normalize_dashboard_role(parts[3] if len(parts) > 3 else "manager")
         if not operator_id:
             continue
         items.append(
@@ -78,6 +97,7 @@ def _parse_dashboard_operators(raw_value: str, *, fallback_name: str) -> tuple[D
                 operator_id=operator_id,
                 display_name=_repair_utf8_mojibake(display_name or operator_id),
                 pin=pin,
+                role=role,
             )
         )
     if items:
@@ -87,6 +107,7 @@ def _parse_dashboard_operators(raw_value: str, *, fallback_name: str) -> tuple[D
             operator_id="manager",
             display_name=_repair_utf8_mojibake(fallback_name) or "Владимир",
             pin="",
+            role="manager",
         ),
     )
 

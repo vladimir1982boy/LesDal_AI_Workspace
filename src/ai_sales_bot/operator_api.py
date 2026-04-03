@@ -150,11 +150,13 @@ class OperatorInboxAPI:
         *,
         operator_name: str,
         operator_id: str = "",
+        force: bool = False,
     ) -> OperatorActionResult:
         snapshot = self.service.claim_conversation(
             conversation_id=conversation_id,
             operator_name=operator_name,
             operator_id=operator_id,
+            force=force,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)

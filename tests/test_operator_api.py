@@ -60,6 +60,14 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(self.service.claimed_by, "Alice")
         self.assertEqual(self.service.claimed_by_id, "alice")
 
+    def test_claim_conversation_forwards_force_flag(self) -> None:
+        self.snapshot.owner_id = "bob"
+        self.snapshot.owner_name = "Bob"
+
+        self.api.claim_conversation(3, operator_name="Alice", operator_id="alice", force=True)
+
+        self.assertTrue(self.service.last_profile["forced_claim"])
+
     def test_release_conversation_clears_owner(self) -> None:
         self.snapshot.mode = ConversationMode.MANAGER
         self.snapshot.status = ConversationStatus.IN_PROGRESS
@@ -205,13 +213,14 @@ class _FakeService:
         self.last_mode = mode
         return self.snapshot
 
-    def claim_conversation(self, *, conversation_id: int, operator_name: str, operator_id: str = "") -> ConversationSnapshot:
+    def claim_conversation(self, *, conversation_id: int, operator_name: str, operator_id: str = "", force: bool = False) -> ConversationSnapshot:
         self.snapshot.mode = ConversationMode.MANAGER
         self.snapshot.status = ConversationStatus.IN_PROGRESS
         self.snapshot.owner_id = operator_id
         self.snapshot.owner_name = operator_name
         self.claimed_by = operator_name
         self.claimed_by_id = operator_id
+        self.last_profile["forced_claim"] = force
         self.last_mode = ConversationMode.MANAGER
         self.last_status = ConversationStatus.IN_PROGRESS
         return self.snapshot

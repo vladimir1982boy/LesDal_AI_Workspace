@@ -250,18 +250,25 @@ class SalesBotService:
         conversation_id: int,
         operator_name: str,
         operator_id: str = "",
+        force: bool = False,
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
         existing_owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
-        if existing_owner_id and operator_id and existing_owner_id != operator_id:
+        forced_reassign = False
+        if existing_owner_id and operator_id and existing_owner_id != operator_id and not force:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name or existing_owner_id}"
             )
-        if not existing_owner_id and owner_name and owner_name != operator_name:
+        if not existing_owner_id and owner_name and owner_name != operator_name and not force:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
+        if force and (
+            (existing_owner_id and operator_id and existing_owner_id != operator_id)
+            or (not existing_owner_id and owner_name and owner_name != operator_name)
+        ):
+            forced_reassign = True
         self.repository.update_conversation_state(
             conversation_id=conversation_id,
             mode=ConversationMode.MANAGER,
@@ -273,9 +280,15 @@ class SalesBotService:
         )
         self.repository.add_conversation_event(
             conversation_id=conversation_id,
-            event_type="claimed_by_manager",
+            event_type="force_claimed_by_supervisor" if forced_reassign else "claimed_by_manager",
             actor=operator_name,
-            payload={"status": ConversationStatus.IN_PROGRESS.value, "operator_id": operator_id},
+            payload={
+                "status": ConversationStatus.IN_PROGRESS.value,
+                "operator_id": operator_id,
+                "forced": forced_reassign,
+                "previous_owner_id": existing_owner_id,
+                "previous_owner_name": owner_name,
+            },
         )
         return self.repository.get_snapshot(conversation_id)
 

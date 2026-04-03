@@ -21,6 +21,51 @@ def _read_dashboard_html() -> bytes:
     return (STATIC_DIR / "dashboard.html").read_bytes()
 
 
+class DashboardPermissionError(RuntimeError):
+    pass
+
+
+def _operator_payload(operator) -> dict[str, object]:
+    return {
+        "operator_id": operator.operator_id,
+        "display_name": operator.display_name,
+        "role": operator.role,
+        "can_force_takeover": operator.can_force_takeover,
+    }
+
+
+def _can_force_takeover(operator: dict[str, object] | None) -> bool:
+    if not operator:
+        return False
+    if bool(operator.get("can_force_takeover")):
+        return True
+    return str(operator.get("role") or "").strip().lower() == "supervisor"
+
+
+def _is_foreign_owner(snapshot, operator: dict[str, object] | None) -> bool:
+    if snapshot is None or operator is None:
+        return False
+    operator_id = str(operator.get("operator_id") or "").strip()
+    operator_name = str(operator.get("display_name") or "").strip()
+    owner_id = str(getattr(snapshot, "owner_id", "") or "").strip()
+    owner_name = str(getattr(snapshot, "owner_name", "") or "").strip()
+    if owner_id and operator_id:
+        return owner_id != operator_id
+    if owner_name:
+        return owner_name != operator_name
+    return False
+
+
+def _resolve_force_claim(snapshot, operator: dict[str, object] | None, requested_force: bool) -> bool:
+    if not requested_force:
+        return False
+    if not _is_foreign_owner(snapshot, operator):
+        return False
+    if not _can_force_takeover(operator):
+        raise DashboardPermissionError("Only supervisors can force takeover of another operator's dialog")
+    return True
+
+
 def build_dashboard_handler(api: OperatorInboxAPI):
     operator_registry = {
         item.operator_id: item
@@ -47,8 +92,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     {
                         "items": [
                             {
-                                "operator_id": item.operator_id,
-                                "display_name": item.display_name,
+                                **_operator_payload(item),
                                 "pin_required": bool(item.pin),
                             }
                             for item in operator_registry.values()
@@ -112,10 +156,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     self._send_json({"error": "Invalid PIN"}, status=HTTPStatus.UNAUTHORIZED)
                     return
                 session_token = secrets.token_urlsafe(24)
-                operator_payload = {
-                    "operator_id": operator.operator_id,
-                    "display_name": operator.display_name,
-                }
+                operator_payload = _operator_payload(operator)
                 operator_sessions[session_token] = operator_payload
                 self._send_json(
                     {
@@ -162,10 +203,15 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
 
                 if action == "claim":
+                    payload = self._read_json()
+                    requested_force = bool(payload.get("force"))
+                    snapshot = api.service.get_snapshot(conversation_id)
+                    force = _resolve_force_claim(snapshot, operator, requested_force)
                     result = api.claim_conversation(
                         conversation_id,
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
+                        force=force,
                     )
                     self._send_json(
                         {
@@ -304,6 +350,9 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
             except ConversationOwnershipError as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+                return
+            except DashboardPermissionError as exc:
+                self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
                 return
             except (LeadProfileValidationError, ValueError) as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)

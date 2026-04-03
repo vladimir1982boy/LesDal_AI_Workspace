@@ -69,6 +69,19 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 pause_ai=True,
             )
 
+    def test_force_claim_reassigns_foreign_owner(self) -> None:
+        snapshot = self.service.claim_conversation(
+            conversation_id=3,
+            operator_name="Supervisor",
+            operator_id="supervisor",
+            force=True,
+        )
+
+        self.assertEqual(snapshot.owner_id, "supervisor")
+        self.assertEqual(snapshot.owner_name, "Supervisor")
+        self.assertEqual(self.repo.events[-1]["event_type"], "force_claimed_by_supervisor")
+        self.assertTrue(self.repo.events[-1]["payload"]["forced"])
+
     def test_release_conversation_clears_owner(self) -> None:
         snapshot = self.service.release_conversation(
             conversation_id=3,
