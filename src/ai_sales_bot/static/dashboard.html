@@ -616,6 +616,7 @@
     const operatorStorageKey = "lesdal.operator_name";
     const soundStorageKey = "lesdal.alert_sound";
     const browserNotifyStorageKey = "lesdal.browser_notify";
+    const dashboardViewStorageKey = "lesdal.dashboard_view";
     const defaultTitle = document.title;
     const state = {
       conversations: [],
@@ -662,10 +663,51 @@
     };
 
     el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
+    loadPersistedView();
     renderAlertToggles();
 
     function authHeaders(extra = {}) {
       return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
+    }
+
+    function persistView() {
+      const payload = {
+        search: el.searchInput.value || "",
+        channel: el.channelFilter.value || "",
+        mode: el.modeFilter.value || "",
+        status: el.statusFilter.value || "",
+        attention: el.attentionFilter.value || "",
+        owner: el.ownerFilter.value || "",
+        onlyMine: state.onlyMine,
+        kpiFocus: state.kpiFocus,
+        selectedId: state.selectedId,
+      };
+      localStorage.setItem(dashboardViewStorageKey, JSON.stringify(payload));
+    }
+
+    function loadPersistedView() {
+      const raw = localStorage.getItem(dashboardViewStorageKey);
+      if (!raw) {
+        return;
+      }
+      try {
+        const saved = JSON.parse(raw);
+        el.searchInput.value = String(saved.search || "");
+        el.channelFilter.value = String(saved.channel || "");
+        el.modeFilter.value = String(saved.mode || "");
+        el.statusFilter.value = String(saved.status || "");
+        el.attentionFilter.value = String(saved.attention || "");
+        el.ownerFilter.value = String(saved.owner || "");
+        state.onlyMine = Boolean(saved.onlyMine);
+        state.kpiFocus = ["all", "urgent", "today", "overdue"].includes(String(saved.kpiFocus))
+          ? String(saved.kpiFocus)
+          : "all";
+        state.selectedId = Number.isFinite(Number(saved.selectedId)) && Number(saved.selectedId) > 0
+          ? Number(saved.selectedId)
+          : null;
+      } catch (error) {
+        localStorage.removeItem(dashboardViewStorageKey);
+      }
     }
 
     function currentOperator() {
@@ -1482,6 +1524,7 @@
 
     async function openConversation(id) {
       state.selectedId = id;
+      persistView();
       renderConversations();
       el.status.textContent = "Открываю диалог...";
       el.status.classList.remove("alert");
@@ -1551,6 +1594,7 @@
     }
 
     async function applyFilters() {
+      persistView();
       await refreshConversations();
       if (state.selectedId && state.conversations.some((item) => item.id === state.selectedId)) {
         await openConversation(state.selectedId);
@@ -1559,6 +1603,7 @@
       } else {
         state.selectedId = null;
         state.detail = null;
+        persistView();
         renderHeader();
         renderThread();
         renderDetails();
@@ -1610,22 +1655,27 @@
 
     el.mineButton.addEventListener("click", async () => {
       state.onlyMine = !state.onlyMine;
+      persistView();
       await applyFilters();
     });
     el.riskAllButton.addEventListener("click", async () => {
       state.kpiFocus = "all";
+      persistView();
       await applyFilters();
     });
     el.riskUrgentButton.addEventListener("click", async () => {
       state.kpiFocus = "urgent";
+      persistView();
       await applyFilters();
     });
     el.riskTodayButton.addEventListener("click", async () => {
       state.kpiFocus = "today";
+      persistView();
       await applyFilters();
     });
     el.riskOverdueButton.addEventListener("click", async () => {
       state.kpiFocus = "overdue";
+      persistView();
       await applyFilters();
     });
     el.claimButton.addEventListener("click", () => postAction("claim", { operator_name: currentOperator() }));
