@@ -117,6 +117,19 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     )
                 )
                 return
+            if parsed.path == "/api/audit/resolution-drilldown":
+                if self._current_operator() is None:
+                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                self._send_json(
+                    api.get_resolution_speed_drilldown(
+                        metric=self._query_str(parsed.query, "metric"),
+                        operator_key=self._query_str(parsed.query, "operator"),
+                        period=self._query_str(parsed.query, "period") or "30d",
+                        limit=self._query_int(parsed.query, "limit", default=50),
+                    )
+                )
+                return
             if parsed.path == "/api/conversations":
                 if self._current_operator() is None:
                     self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)

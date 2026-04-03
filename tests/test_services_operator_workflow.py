@@ -177,6 +177,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 1,
                 "conversation_id": 3,
                 "event_type": "customer_waiting_manager",
+                "channel": "vk",
+                "display_name": "Test User",
+                "external_chat_id": "42",
                 "created_at": "2026-04-03T10:00:00+00:00",
                 "payload": {"status": "waiting_manager"},
             },
@@ -185,6 +188,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 3,
                 "event_type": "manager_reply",
                 "actor": "Alice",
+                "channel": "vk",
+                "display_name": "Test User",
+                "external_chat_id": "42",
                 "created_at": "2026-04-03T10:10:00+00:00",
                 "payload": {"text": "Reply 1", "operator_id": "alice"},
             },
@@ -192,6 +198,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 3,
                 "conversation_id": 4,
                 "event_type": "customer_waiting_manager",
+                "channel": "telegram",
+                "display_name": "Second User",
+                "external_chat_id": "tg-4",
                 "created_at": "2026-04-03T11:00:00+00:00",
                 "payload": {"status": "waiting_manager"},
             },
@@ -200,6 +209,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 4,
                 "event_type": "manager_reply",
                 "actor": "Bob",
+                "channel": "telegram",
+                "display_name": "Second User",
+                "external_chat_id": "tg-4",
                 "created_at": "2026-04-03T11:30:00+00:00",
                 "payload": {"text": "Reply 2", "operator_id": "bob"},
             },
@@ -208,6 +220,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 5,
                 "event_type": "force_claimed_by_supervisor",
                 "actor": "Supervisor 1",
+                "channel": "max",
+                "display_name": "Forced User",
+                "external_chat_id": "max-5",
                 "created_at": "2026-04-03T09:00:00+00:00",
                 "payload": {"forced": True, "operator_id": "supervisor_1"},
             },
@@ -215,6 +230,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 6,
                 "conversation_id": 5,
                 "event_type": "status_changed",
+                "channel": "max",
+                "display_name": "Forced User",
+                "external_chat_id": "max-5",
                 "created_at": "2026-04-03T09:40:00+00:00",
                 "payload": {"status": "closed"},
             },
@@ -223,6 +241,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 6,
                 "event_type": "force_claimed_by_supervisor",
                 "actor": "Supervisor 2",
+                "channel": "vk",
+                "display_name": "Returned User",
+                "external_chat_id": "vk-6",
                 "created_at": "2026-04-03T08:00:00+00:00",
                 "payload": {"forced": True, "operator_id": "supervisor_2"},
             },
@@ -230,6 +251,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 8,
                 "conversation_id": 6,
                 "event_type": "returned_to_ai",
+                "channel": "vk",
+                "display_name": "Returned User",
+                "external_chat_id": "vk-6",
                 "created_at": "2026-04-03T08:20:00+00:00",
                 "payload": {"mode": "ai"},
             },
@@ -260,6 +284,70 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["operator"], "Supervisor 1")
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["median_minutes"], 40)
 
+    def test_resolution_speed_drilldown_returns_operator_episodes(self) -> None:
+        self.repo.transition_events = [
+            {
+                "id": 1,
+                "conversation_id": 3,
+                "event_type": "customer_waiting_manager",
+                "channel": "vk",
+                "display_name": "Test User",
+                "external_chat_id": "42",
+                "created_at": "2026-04-03T10:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 2,
+                "conversation_id": 3,
+                "event_type": "manager_reply",
+                "actor": "Alice",
+                "channel": "vk",
+                "display_name": "Test User",
+                "external_chat_id": "42",
+                "created_at": "2026-04-03T10:10:00+00:00",
+                "payload": {"text": "Reply 1", "operator_id": "alice"},
+            },
+            {
+                "id": 3,
+                "conversation_id": 4,
+                "event_type": "customer_waiting_manager",
+                "channel": "telegram",
+                "display_name": "Second User",
+                "external_chat_id": "tg-4",
+                "created_at": "2026-04-03T11:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 4,
+                "conversation_id": 4,
+                "event_type": "manager_reply",
+                "actor": "Bob",
+                "channel": "telegram",
+                "display_name": "Second User",
+                "external_chat_id": "tg-4",
+                "created_at": "2026-04-03T11:30:00+00:00",
+                "payload": {"text": "Reply 2", "operator_id": "bob"},
+            },
+        ]
+
+        from unittest import mock
+        from datetime import datetime, timezone
+
+        with mock.patch("src.ai_sales_bot.services._utcnow", return_value=datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)):
+            payload = self.service.get_resolution_speed_drilldown(
+                metric="waiting_reply",
+                operator_key="alice",
+                period="today",
+                limit=10,
+            )
+
+        self.assertEqual(payload["operator"], "Alice")
+        self.assertEqual(payload["median_minutes"], 10)
+        self.assertEqual(payload["samples"], 1)
+        self.assertEqual(payload["episodes"][0]["conversation_id"], 3)
+        self.assertEqual(payload["episodes"][0]["display_name"], "Test User")
+        self.assertEqual(payload["episodes"][0]["duration_minutes"], 10)
+
     def test_forced_takeover_summary_applies_today_period_to_event_metrics(self) -> None:
         self.repo.forced_events = [
             {
@@ -284,6 +372,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 1,
                 "conversation_id": 3,
                 "event_type": "customer_waiting_manager",
+                "channel": "vk",
+                "display_name": "Today User",
+                "external_chat_id": "42",
                 "created_at": "2026-04-03T10:00:00+00:00",
                 "payload": {"status": "waiting_manager"},
             },
@@ -292,6 +383,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 3,
                 "event_type": "manager_reply",
                 "actor": "Alice",
+                "channel": "vk",
+                "display_name": "Today User",
+                "external_chat_id": "42",
                 "created_at": "2026-04-03T10:10:00+00:00",
                 "payload": {"text": "Reply 1", "operator_id": "alice"},
             },
@@ -299,6 +393,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 3,
                 "conversation_id": 4,
                 "event_type": "customer_waiting_manager",
+                "channel": "telegram",
+                "display_name": "Older User",
+                "external_chat_id": "tg-4",
                 "created_at": "2026-04-01T11:00:00+00:00",
                 "payload": {"status": "waiting_manager"},
             },
@@ -307,6 +404,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "conversation_id": 4,
                 "event_type": "manager_reply",
                 "actor": "Bob",
+                "channel": "telegram",
+                "display_name": "Older User",
+                "external_chat_id": "tg-4",
                 "created_at": "2026-04-01T11:30:00+00:00",
                 "payload": {"text": "Reply 2", "operator_id": "bob"},
             },

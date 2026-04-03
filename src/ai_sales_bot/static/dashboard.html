@@ -692,6 +692,7 @@
       onlyMine: false,
       kpiFocus: "all",
       auditPeriod: "30d",
+      auditDrilldown: null,
       operatorSessionToken: localStorage.getItem(operatorSessionStorageKey) || "",
       selectedOperatorId: localStorage.getItem(operatorChoiceStorageKey) || "",
       operator: null,
@@ -1472,6 +1473,7 @@
       const waitingByOperator = speed.waiting_to_first_reply_by_operator || [];
       const forcedByOperator = speed.forced_to_resolution_by_operator || [];
       const currentPeriod = summary.period || state.auditPeriod || "30d";
+      const drilldown = state.auditDrilldown;
       return `
         <section class="audit-board">
           <div class="queue-title">
@@ -1521,7 +1523,7 @@
               <div style="color:var(--muted);">Быстрее всего снимают waiting_manager</div>
               <div class="audit-list">
                 ${waitingByOperator.length ? waitingByOperator.slice(0, 5).map((item, index) => `
-                  <div class="audit-row">
+                  <div class="audit-row" data-drilldown-metric="waiting_reply" data-drilldown-operator="${escapeAttr(item.operator_key || item.operator || "")}" data-drilldown-label="${escapeAttr(item.operator || "unknown")}" style="cursor:pointer;">
                     <strong style="font-size:14px; margin:0;">${index === 0 ? "Лидер: " : ""}${escapeHtml(item.operator || "unknown")}</strong>
                     <div style="color:var(--muted); margin-top:4px;">медиана: ${escapeHtml(formatResolutionMinutes(item.median_minutes))}</div>
                     <div style="color:var(--muted); margin-top:4px;">ответов в выборке: ${item.samples || 0}</div>
@@ -1533,7 +1535,7 @@
               <div style="color:var(--muted);">Дольше держат forced-кейсы</div>
               <div class="audit-list">
                 ${forcedByOperator.length ? forcedByOperator.slice(0, 5).map((item, index) => `
-                  <div class="audit-row">
+                  <div class="audit-row" data-drilldown-metric="forced_resolution" data-drilldown-operator="${escapeAttr(item.operator_key || item.operator || "")}" data-drilldown-label="${escapeAttr(item.operator || "unknown")}" style="cursor:pointer;">
                     <strong style="font-size:14px; margin:0;">${index === 0 ? "Самый долгий: " : ""}${escapeHtml(item.operator || "unknown")}</strong>
                     <div style="color:var(--muted); margin-top:4px;">медиана: ${escapeHtml(formatResolutionMinutes(item.median_minutes))}</div>
                     <div style="color:var(--muted); margin-top:4px;">кейсов в выборке: ${item.samples || 0}</div>
@@ -1542,6 +1544,39 @@
               </div>
             </div>
           </div>
+          ${drilldown ? `
+            <div class="audit-metric" style="margin-top:12px;">
+              <div class="queue-title">
+                <span>Drill-down: ${escapeHtml(drilldown.operator || "unknown")} · ${escapeHtml(drilldown.metric_label || drilldown.metric || "")}</span>
+                <button class="risk-chip" data-close-drilldown="true">Скрыть</button>
+              </div>
+              <div class="risk-note">Эпизоды, из которых собрана медиана за окно ${escapeHtml(drilldown.period_label || summary.period_label || "")}. Нажмите на диалог, чтобы открыть его карточку справа.</div>
+              <div class="audit-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:10px;">
+                <div class="audit-metric">
+                  <div style="color:var(--muted);">Медиана</div>
+                  <strong>${formatResolutionMinutes(drilldown.median_minutes)}</strong>
+                </div>
+                <div class="audit-metric">
+                  <div style="color:var(--muted);">Эпизодов</div>
+                  <strong>${drilldown.samples || 0}</strong>
+                </div>
+                <div class="audit-metric">
+                  <div style="color:var(--muted);">Период</div>
+                  <strong>${escapeHtml(drilldown.period_label || "")}</strong>
+                </div>
+              </div>
+              <div class="audit-list" style="margin-top:12px;">
+                ${(drilldown.episodes || []).length ? drilldown.episodes.map((item) => `
+                  <div class="audit-row" data-open-conversation="${item.conversation_id}" style="cursor:pointer;">
+                    <strong style="font-size:14px; margin:0;">${escapeHtml(item.display_name || `conv:${item.conversation_id}`)}</strong>
+                    <div style="color:var(--muted); margin-top:4px;">${escapeHtml(item.channel || "-")} · chat ${escapeHtml(item.external_chat_id || "-")}</div>
+                    <div style="margin-top:4px;">${escapeHtml(formatResolutionMinutes(item.duration_minutes))} · ${escapeHtml(item.resolution || "resolved")}</div>
+                    <div style="color:var(--muted); margin-top:4px;">${escapeHtml(formatDateTime(item.started_at))} → ${escapeHtml(formatDateTime(item.resolved_at))}</div>
+                  </div>
+                `).join("") : '<div class="audit-row">Для этого оператора пока нет эпизодов в выбранном окне.</div>'}
+              </div>
+            </div>
+          ` : ""}
           <div class="audit-grid">
             <div class="audit-metric">
               <div style="color:var(--muted);">Ждут менеджера</div>
@@ -1614,8 +1649,29 @@
         el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
           node.addEventListener("click", async () => {
             state.auditPeriod = node.dataset.auditPeriod || "30d";
+            state.auditDrilldown = null;
             persistView();
             await applyFilters();
+          });
+        });
+        el.list.querySelectorAll("[data-drilldown-metric]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            await openAuditDrilldown(
+              node.dataset.drilldownMetric || "",
+              node.dataset.drilldownOperator || "",
+              node.dataset.drilldownLabel || "",
+            );
+          });
+        });
+        el.list.querySelectorAll("[data-open-conversation]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            await openConversation(Number(node.dataset.openConversation));
+          });
+        });
+        el.list.querySelectorAll("[data-close-drilldown]").forEach((node) => {
+          node.addEventListener("click", () => {
+            state.auditDrilldown = null;
+            renderConversations();
           });
         });
         return;
@@ -1639,8 +1695,29 @@
         el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
           node.addEventListener("click", async () => {
             state.auditPeriod = node.dataset.auditPeriod || "30d";
+            state.auditDrilldown = null;
             persistView();
             await applyFilters();
+          });
+        });
+        el.list.querySelectorAll("[data-drilldown-metric]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            await openAuditDrilldown(
+              node.dataset.drilldownMetric || "",
+              node.dataset.drilldownOperator || "",
+              node.dataset.drilldownLabel || "",
+            );
+          });
+        });
+        el.list.querySelectorAll("[data-open-conversation]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            await openConversation(Number(node.dataset.openConversation));
+          });
+        });
+        el.list.querySelectorAll("[data-close-drilldown]").forEach((node) => {
+          node.addEventListener("click", () => {
+            state.auditDrilldown = null;
+            renderConversations();
           });
         });
         return;
@@ -1699,8 +1776,29 @@
       el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
         node.addEventListener("click", async () => {
           state.auditPeriod = node.dataset.auditPeriod || "30d";
+          state.auditDrilldown = null;
           persistView();
           await applyFilters();
+        });
+      });
+      el.list.querySelectorAll("[data-drilldown-metric]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          await openAuditDrilldown(
+            node.dataset.drilldownMetric || "",
+            node.dataset.drilldownOperator || "",
+            node.dataset.drilldownLabel || "",
+          );
+        });
+      });
+      el.list.querySelectorAll("[data-open-conversation]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          await openConversation(Number(node.dataset.openConversation));
+        });
+      });
+      el.list.querySelectorAll("[data-close-drilldown]").forEach((node) => {
+        node.addEventListener("click", () => {
+          state.auditDrilldown = null;
+          renderConversations();
         });
       });
     }
@@ -1960,16 +2058,39 @@
       if (!state.operator) {
         state.conversations = [];
         state.auditSummary = null;
+        state.auditDrilldown = null;
         renderConversations();
         updateDocumentTitle();
         return;
       }
       const previous = state.conversations.slice();
       state.auditSummary = await apiFetch(`/api/audit/forced-takeovers?period=${encodeURIComponent(state.auditPeriod || "30d")}`);
+      if (state.auditDrilldown?.operator_key && state.auditDrilldown?.metric) {
+        state.auditDrilldown = await apiFetch(
+          `/api/audit/resolution-drilldown?metric=${encodeURIComponent(state.auditDrilldown.metric)}&operator=${encodeURIComponent(state.auditDrilldown.operator_key)}&period=${encodeURIComponent(state.auditPeriod || "30d")}`
+        );
+      }
       const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
       await handleQueueAlerts(previous, state.conversations);
       renderConversations();
+    }
+
+    async function openAuditDrilldown(metric, operatorKey, operatorLabel = "") {
+      if (!state.operator || !metric || !operatorKey) {
+        return;
+      }
+      el.status.textContent = "Открываю supervisor drill-down...";
+      el.status.classList.remove("alert");
+      state.auditDrilldown = await apiFetch(
+        `/api/audit/resolution-drilldown?metric=${encodeURIComponent(metric)}&operator=${encodeURIComponent(operatorKey)}&period=${encodeURIComponent(state.auditPeriod || "30d")}`
+      );
+      if (!state.auditDrilldown.operator && operatorLabel) {
+        state.auditDrilldown.operator = operatorLabel;
+      }
+      renderConversations();
+      el.status.textContent = "Supervisor drill-down загружен.";
+      el.status.classList.remove("alert");
     }
 
     async function openConversation(id) {

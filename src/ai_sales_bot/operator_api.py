@@ -138,6 +138,25 @@ class OperatorInboxAPI:
             for key, value in summary.items()
         }
 
+    def get_resolution_speed_drilldown(
+        self,
+        *,
+        metric: str,
+        operator_key: str,
+        period: str = "30d",
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        payload = self.service.get_resolution_speed_drilldown(
+            metric=metric,
+            operator_key=operator_key,
+            period=period,
+            limit=limit,
+        )
+        return {
+            key: _serialize_value(value)
+            for key, value in payload.items()
+        }
+
     def pause_conversation(self, conversation_id: int) -> OperatorActionResult:
         claim_method = getattr(self.service, "claim_conversation", None)
         if callable(claim_method):

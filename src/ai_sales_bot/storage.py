@@ -844,10 +844,21 @@ class SQLiteLeadRepository:
         with self._connect() as conn:
             return conn.execute(
                 f"""
-                SELECT id, conversation_id, event_type, actor, payload, created_at
-                FROM conversation_events
-                WHERE event_type IN ({placeholders})
-                ORDER BY conversation_id ASC, id ASC
+                SELECT
+                    e.id,
+                    e.conversation_id,
+                    e.event_type,
+                    e.actor,
+                    e.payload,
+                    e.created_at,
+                    c.channel,
+                    c.external_chat_id,
+                    ct.display_name
+                FROM conversation_events e
+                JOIN conversations c ON c.id = e.conversation_id
+                JOIN contacts ct ON ct.id = c.contact_id
+                WHERE e.event_type IN ({placeholders})
+                ORDER BY e.conversation_id ASC, e.id ASC
                 LIMIT ?
                 """,
                 (*normalized, limit),
@@ -1431,8 +1442,18 @@ class JSONLeadRepository:
         normalized = {str(item).strip() for item in event_types if str(item).strip()}
         if not normalized:
             return []
+        conversations = {int(item["id"]): item for item in data["conversations"]}
+        contacts = {int(item["id"]): item for item in data["contacts"]}
         rows = [
-            row
+            {
+                **row,
+                "channel": conversations.get(int(row["conversation_id"]), {}).get("channel", ""),
+                "external_chat_id": conversations.get(int(row["conversation_id"]), {}).get("external_chat_id", ""),
+                "display_name": contacts.get(
+                    int(conversations.get(int(row["conversation_id"]), {}).get("contact_id", 0) or 0),
+                    {},
+                ).get("display_name", ""),
+            }
             for row in data["conversation_events"]
             if str(row.get("event_type", "")).strip() in normalized
         ]

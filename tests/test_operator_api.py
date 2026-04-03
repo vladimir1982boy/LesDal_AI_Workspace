@@ -134,6 +134,20 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(payload["resolution_speed"]["waiting_to_first_reply_by_operator"][0]["operator"], "Alice")
         self.assertEqual(self.service.last_period, "7d")
 
+    def test_get_resolution_speed_drilldown_proxies_service_payload(self) -> None:
+        payload = self.api.get_resolution_speed_drilldown(
+            metric="waiting_reply",
+            operator_key="alice",
+            period="today",
+            limit=10,
+        )
+
+        self.assertEqual(payload["operator"], "Alice")
+        self.assertEqual(payload["metric"], "waiting_reply")
+        self.assertEqual(payload["episodes"][0]["conversation_id"], 3)
+        self.assertEqual(self.service.last_drilldown["metric"], "waiting_reply")
+        self.assertEqual(self.service.last_drilldown["operator_key"], "alice")
+
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
 
@@ -180,6 +194,7 @@ class _FakeService:
         self.last_actor_id = ""
         self.last_profile: dict = {}
         self.last_period = ""
+        self.last_drilldown: dict = {}
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -233,6 +248,36 @@ class _FakeService:
                     {"operator": "Supervisor", "median_minutes": 48, "samples": 2},
                 ],
             },
+        }
+
+    def get_resolution_speed_drilldown(self, *, metric: str, operator_key: str, period: str = "30d", limit: int = 50) -> dict:
+        self.last_drilldown = {
+            "metric": metric,
+            "operator_key": operator_key,
+            "period": period,
+            "limit": limit,
+        }
+        return {
+            "metric": metric,
+            "metric_label": "Waiting -> first manager reply",
+            "operator_key": operator_key,
+            "operator": "Alice",
+            "period": period,
+            "period_label": "Сегодня" if period == "today" else "30 дней",
+            "median_minutes": 12,
+            "samples": 2,
+            "episodes": [
+                {
+                    "conversation_id": 3,
+                    "display_name": "Test User",
+                    "channel": "vk",
+                    "external_chat_id": "42",
+                    "started_at": "2026-04-03T10:00:00+00:00",
+                    "resolved_at": "2026-04-03T10:12:00+00:00",
+                    "duration_minutes": 12,
+                    "resolution": "manager_reply",
+                }
+            ],
         }
 
     def build_manager_summary(self, *, conversation_id: int, limit: int = 12) -> str:

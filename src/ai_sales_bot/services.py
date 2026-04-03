@@ -87,6 +87,20 @@ def _event_operator_identity(row: dict) -> tuple[str, str]:
     return key, label
 
 
+def _resolution_label(row: dict) -> str:
+    event_type = str(row.get("event_type") or "").strip()
+    if event_type == "manager_reply":
+        return "manager_reply"
+    if event_type == "returned_to_ai":
+        return "returned_to_ai"
+    if event_type == "status_changed":
+        payload = _coerce_event_payload(row.get("payload"))
+        status = str(payload.get("status") or "").strip()
+        if status:
+            return f"status:{status}"
+    return event_type or "resolved"
+
+
 def _collect_resolution_minutes(
     events: list[dict],
     *,
@@ -191,6 +205,7 @@ def _collect_resolution_minutes_by_operator(
         pending_operator.pop(conversation_id, None)
     rows = [
         {
+            "operator_key": key,
             "operator": labels_by_operator.get(key, key),
             "median_minutes": _median_minutes(samples),
             "samples": len(samples),
@@ -206,6 +221,80 @@ def _collect_resolution_minutes_by_operator(
         )
     )
     return rows
+
+
+def _collect_resolution_episodes(
+    events: list[dict],
+    *,
+    start_types: set[str],
+    operator_from: str,
+    since: datetime | None = None,
+    finish_types: set[str] | None = None,
+    finish_matcher=None,
+) -> list[dict[str, object]]:
+    pending_rows: dict[int, dict] = {}
+    pending_started_at: dict[int, datetime] = {}
+    pending_operator: dict[int, tuple[str, str]] = {}
+    ordered = sorted(
+        events,
+        key=lambda row: (
+            int(row.get("conversation_id") or 0),
+            int(row.get("id") or 0),
+        ),
+    )
+    episodes: list[dict[str, object]] = []
+    for row in ordered:
+        conversation_id = int(row.get("conversation_id") or 0)
+        event_type = str(row.get("event_type") or "").strip()
+        created_at = _parse_event_time(row.get("created_at"))
+        if not conversation_id or not event_type or created_at is None:
+            continue
+        if event_type in start_types:
+            if since is not None and created_at < since:
+                pending_rows.pop(conversation_id, None)
+                pending_started_at.pop(conversation_id, None)
+                pending_operator.pop(conversation_id, None)
+                continue
+            pending_rows[conversation_id] = row
+            pending_started_at[conversation_id] = created_at
+            if operator_from == "start":
+                pending_operator[conversation_id] = _event_operator_identity(row)
+            continue
+        started_at = pending_started_at.get(conversation_id)
+        start_row = pending_rows.get(conversation_id)
+        if started_at is None or start_row is None:
+            continue
+        is_finish = False
+        if finish_types and event_type in finish_types:
+            is_finish = True
+        elif callable(finish_matcher):
+            is_finish = bool(finish_matcher(row))
+        if not is_finish:
+            continue
+        if operator_from == "finish":
+            operator_key, operator_label = _event_operator_identity(row)
+        else:
+            operator_key, operator_label = pending_operator.get(conversation_id, ("unknown", "unknown"))
+        delta_minutes = int((created_at - started_at).total_seconds() // 60)
+        if delta_minutes >= 0:
+            episodes.append(
+                {
+                    "operator_key": operator_key,
+                    "operator": operator_label,
+                    "conversation_id": conversation_id,
+                    "display_name": str(row.get("display_name") or start_row.get("display_name") or f"conv:{conversation_id}"),
+                    "channel": str(row.get("channel") or start_row.get("channel") or ""),
+                    "external_chat_id": str(row.get("external_chat_id") or start_row.get("external_chat_id") or ""),
+                    "started_at": start_row.get("created_at"),
+                    "resolved_at": row.get("created_at"),
+                    "duration_minutes": delta_minutes,
+                    "resolution": _resolution_label(row),
+                }
+            )
+        pending_rows.pop(conversation_id, None)
+        pending_started_at.pop(conversation_id, None)
+        pending_operator.pop(conversation_id, None)
+    return episodes
 
 
 class SalesBotService:
@@ -760,4 +849,79 @@ class SalesBotService:
             "recent": recent[:8],
             "ownership_quality": ownership_quality,
             "resolution_speed": resolution_speed,
+        }
+
+    def get_resolution_speed_drilldown(
+        self,
+        *,
+        metric: str,
+        operator_key: str,
+        period: str = "30d",
+        limit: int = 50,
+    ) -> dict:
+        normalized_metric = str(metric or "").strip().lower()
+        target_operator = str(operator_key or "").strip().lower()
+        if normalized_metric not in {"waiting_reply", "forced_resolution"}:
+            raise ValueError("Unsupported drilldown metric")
+        if not target_operator:
+            raise ValueError("operator_key is required")
+        now = _utcnow()
+        normalized_period, period_label, period_start = _resolve_audit_period(period, now=now)
+        transition_rows = [
+            dict(row)
+            for row in self.repository.list_conversation_events_by_type(
+                event_types=(
+                    "customer_waiting_manager",
+                    "manager_reply",
+                    "force_claimed_by_supervisor",
+                    "returned_to_ai",
+                    "status_changed",
+                ),
+                limit=5000,
+            )
+        ]
+        if normalized_metric == "waiting_reply":
+            episodes = _collect_resolution_episodes(
+                transition_rows,
+                start_types={"customer_waiting_manager"},
+                operator_from="finish",
+                since=period_start,
+                finish_types={"manager_reply"},
+            )
+            metric_label = "Waiting -> first manager reply"
+        else:
+            episodes = _collect_resolution_episodes(
+                transition_rows,
+                start_types={"force_claimed_by_supervisor"},
+                operator_from="start",
+                since=period_start,
+                finish_types={"returned_to_ai"},
+                finish_matcher=lambda row: (
+                    str(row.get("event_type") or "") == "status_changed"
+                    and _coerce_event_payload(row.get("payload")).get("status") == ConversationStatus.CLOSED.value
+                ),
+            )
+            metric_label = "Forced takeover -> resolution"
+        filtered = [
+            row for row in episodes
+            if str(row.get("operator_key") or "").strip().lower() == target_operator
+        ]
+        filtered.sort(
+            key=lambda row: (
+                -int(row.get("duration_minutes") or 0),
+                str(row.get("resolved_at") or ""),
+            )
+        )
+        operator_label = filtered[0]["operator"] if filtered else target_operator
+        sample_minutes = [int(row.get("duration_minutes") or 0) for row in filtered]
+        return {
+            "metric": normalized_metric,
+            "metric_label": metric_label,
+            "operator_key": target_operator,
+            "operator": operator_label,
+            "period": normalized_period,
+            "period_label": period_label,
+            "median_minutes": _median_minutes(sample_minutes),
+            "samples": len(filtered),
+            "episodes": filtered[:limit],
         }
