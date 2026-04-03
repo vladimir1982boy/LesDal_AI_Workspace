@@ -184,8 +184,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 2,
                 "conversation_id": 3,
                 "event_type": "manager_reply",
+                "actor": "Alice",
                 "created_at": "2026-04-03T10:10:00+00:00",
-                "payload": {"text": "Reply 1"},
+                "payload": {"text": "Reply 1", "operator_id": "alice"},
             },
             {
                 "id": 3,
@@ -198,15 +199,17 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 4,
                 "conversation_id": 4,
                 "event_type": "manager_reply",
+                "actor": "Bob",
                 "created_at": "2026-04-03T11:30:00+00:00",
-                "payload": {"text": "Reply 2"},
+                "payload": {"text": "Reply 2", "operator_id": "bob"},
             },
             {
                 "id": 5,
                 "conversation_id": 5,
                 "event_type": "force_claimed_by_supervisor",
+                "actor": "Supervisor 1",
                 "created_at": "2026-04-03T09:00:00+00:00",
-                "payload": {"forced": True},
+                "payload": {"forced": True, "operator_id": "supervisor_1"},
             },
             {
                 "id": 6,
@@ -219,8 +222,9 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 "id": 7,
                 "conversation_id": 6,
                 "event_type": "force_claimed_by_supervisor",
+                "actor": "Supervisor 2",
                 "created_at": "2026-04-03T08:00:00+00:00",
-                "payload": {"forced": True},
+                "payload": {"forced": True, "operator_id": "supervisor_2"},
             },
             {
                 "id": 8,
@@ -251,6 +255,10 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_samples"], 2)
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_median_minutes"], 30)
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_samples"], 2)
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_by_operator"][0]["operator"], "Alice")
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_by_operator"][0]["median_minutes"], 10)
+        self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["operator"], "Supervisor 1")
+        self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["median_minutes"], 40)
 
 
 class _FakeRepository:

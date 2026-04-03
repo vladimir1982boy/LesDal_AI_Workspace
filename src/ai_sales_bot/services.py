@@ -66,6 +66,15 @@ def _median_minutes(samples: list[int]) -> int | float | None:
     return round(float(value), 1)
 
 
+def _event_operator_identity(row: dict) -> tuple[str, str]:
+    payload = _coerce_event_payload(row.get("payload"))
+    operator_id = str(payload.get("operator_id") or "").strip()
+    actor = str(row.get("actor") or "").strip()
+    key = operator_id or actor.lower() or "unknown"
+    label = actor or operator_id or "unknown"
+    return key, label
+
+
 def _collect_resolution_minutes(
     events: list[dict],
     *,
@@ -106,6 +115,76 @@ def _collect_resolution_minutes(
             durations.append(delta_minutes)
         pending_started_at.pop(conversation_id, None)
     return durations
+
+
+def _collect_resolution_minutes_by_operator(
+    events: list[dict],
+    *,
+    start_types: set[str],
+    operator_from: str,
+    finish_types: set[str] | None = None,
+    finish_matcher=None,
+    descending: bool = False,
+) -> list[dict[str, object]]:
+    pending_started_at: dict[int, datetime] = {}
+    pending_operator: dict[int, tuple[str, str]] = {}
+    samples_by_operator: dict[str, list[int]] = {}
+    labels_by_operator: dict[str, str] = {}
+    ordered = sorted(
+        events,
+        key=lambda row: (
+            int(row.get("conversation_id") or 0),
+            int(row.get("id") or 0),
+        ),
+    )
+    for row in ordered:
+        conversation_id = int(row.get("conversation_id") or 0)
+        event_type = str(row.get("event_type") or "").strip()
+        created_at = _parse_event_time(row.get("created_at"))
+        if not conversation_id or not event_type or created_at is None:
+            continue
+        if event_type in start_types:
+            pending_started_at[conversation_id] = created_at
+            if operator_from == "start":
+                pending_operator[conversation_id] = _event_operator_identity(row)
+            continue
+        started_at = pending_started_at.get(conversation_id)
+        if started_at is None:
+            continue
+        is_finish = False
+        if finish_types and event_type in finish_types:
+            is_finish = True
+        elif callable(finish_matcher):
+            is_finish = bool(finish_matcher(row))
+        if not is_finish:
+            continue
+        if operator_from == "finish":
+            operator_key, operator_label = _event_operator_identity(row)
+        else:
+            operator_key, operator_label = pending_operator.get(conversation_id, ("unknown", "unknown"))
+        delta_minutes = int((created_at - started_at).total_seconds() // 60)
+        if delta_minutes >= 0:
+            samples_by_operator.setdefault(operator_key, []).append(delta_minutes)
+            labels_by_operator[operator_key] = operator_label
+        pending_started_at.pop(conversation_id, None)
+        pending_operator.pop(conversation_id, None)
+    rows = [
+        {
+            "operator": labels_by_operator.get(key, key),
+            "median_minutes": _median_minutes(samples),
+            "samples": len(samples),
+        }
+        for key, samples in samples_by_operator.items()
+        if samples
+    ]
+    rows.sort(
+        key=lambda item: (
+            -(item.get("median_minutes") or 0) if descending else (item.get("median_minutes") or 0),
+            -int(item.get("samples") or 0),
+            str(item.get("operator") or ""),
+        )
+    )
+    return rows
 
 
 class SalesBotService:
@@ -612,11 +691,30 @@ class SalesBotService:
                 and _coerce_event_payload(row.get("payload")).get("status") == ConversationStatus.CLOSED.value
             ),
         )
+        waiting_to_reply_by_operator = _collect_resolution_minutes_by_operator(
+            transition_rows,
+            start_types={"customer_waiting_manager"},
+            operator_from="finish",
+            finish_types={"manager_reply"},
+        )
+        forced_to_resolution_by_operator = _collect_resolution_minutes_by_operator(
+            transition_rows,
+            start_types={"force_claimed_by_supervisor"},
+            operator_from="start",
+            finish_types={"returned_to_ai"},
+            finish_matcher=lambda row: (
+                str(row.get("event_type") or "") == "status_changed"
+                and _coerce_event_payload(row.get("payload")).get("status") == ConversationStatus.CLOSED.value
+            ),
+            descending=True,
+        )
         resolution_speed = {
             "waiting_to_first_reply_median_minutes": _median_minutes(waiting_to_reply_minutes),
             "waiting_to_first_reply_samples": len(waiting_to_reply_minutes),
             "forced_to_resolution_median_minutes": _median_minutes(forced_to_resolution_minutes),
             "forced_to_resolution_samples": len(forced_to_resolution_minutes),
+            "waiting_to_first_reply_by_operator": waiting_to_reply_by_operator[:8],
+            "forced_to_resolution_by_operator": forced_to_resolution_by_operator[:8],
         }
         return {
             "today_count": today_count,

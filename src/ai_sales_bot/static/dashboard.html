@@ -1464,6 +1464,8 @@
       const recent = summary.recent || [];
       const quality = summary.ownership_quality || {};
       const speed = summary.resolution_speed || {};
+      const waitingByOperator = speed.waiting_to_first_reply_by_operator || [];
+      const forcedByOperator = speed.forced_to_resolution_by_operator || [];
       return `
         <section class="audit-board">
           <div class="queue-title">
@@ -1526,6 +1528,32 @@
               <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
                 Медиана времени от forced takeover до closed или возврата AI.
                 Выборка: ${speed.forced_to_resolution_samples || 0}
+              </div>
+            </div>
+          </div>
+          <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Быстрее всего снимают waiting_manager</div>
+              <div class="audit-list">
+                ${waitingByOperator.length ? waitingByOperator.slice(0, 5).map((item, index) => `
+                  <div class="audit-row">
+                    <strong style="font-size:14px; margin:0;">${index === 0 ? "Лидер: " : ""}${escapeHtml(item.operator || "unknown")}</strong>
+                    <div style="color:var(--muted); margin-top:4px;">медиана: ${escapeHtml(formatResolutionMinutes(item.median_minutes))}</div>
+                    <div style="color:var(--muted); margin-top:4px;">ответов в выборке: ${item.samples || 0}</div>
+                  </div>
+                `).join("") : '<div class="audit-row">Пока нет manager reply, чтобы сравнить скорость по операторам.</div>'}
+              </div>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Дольше держат forced-кейсы</div>
+              <div class="audit-list">
+                ${forcedByOperator.length ? forcedByOperator.slice(0, 5).map((item, index) => `
+                  <div class="audit-row">
+                    <strong style="font-size:14px; margin:0;">${index === 0 ? "Самый долгий: " : ""}${escapeHtml(item.operator || "unknown")}</strong>
+                    <div style="color:var(--muted); margin-top:4px;">медиана: ${escapeHtml(formatResolutionMinutes(item.median_minutes))}</div>
+                    <div style="color:var(--muted); margin-top:4px;">кейсов в выборке: ${item.samples || 0}</div>
+                  </div>
+                `).join("") : '<div class="audit-row">Пока нет завершённых forced takeover-кейсов для сравнения.</div>'}
               </div>
             </div>
           </div>
