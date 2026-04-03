@@ -34,6 +34,25 @@ def _parse_optional_datetime(raw_value: object) -> datetime | None:
     return datetime.fromisoformat(str(raw_value))
 
 
+def _forced_takeover_meta(rows: list[dict]) -> dict[str, object]:
+    force_rows = [
+        row for row in rows
+        if str(row.get("event_type") or "") == "force_claimed_by_supervisor"
+    ]
+    if not force_rows:
+        return {
+            "has_forced_takeover": False,
+            "last_forced_takeover_at": None,
+            "last_forced_takeover_by": "",
+        }
+    latest = max(force_rows, key=lambda item: int(item.get("id", 0)))
+    return {
+        "has_forced_takeover": True,
+        "last_forced_takeover_at": latest.get("created_at"),
+        "last_forced_takeover_by": str(latest.get("actor") or ""),
+    }
+
+
 class SQLiteLeadRepository:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = Path(db_path)
@@ -629,6 +648,28 @@ class SQLiteLeadRepository:
                     c.last_customer_message_at,
                     c.last_manager_message_at,
                     c.needs_attention,
+                    EXISTS(
+                        SELECT 1
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                    ) AS has_forced_takeover,
+                    (
+                        SELECT force_events.created_at
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                        ORDER BY force_events.id DESC
+                        LIMIT 1
+                    ) AS last_forced_takeover_at,
+                    (
+                        SELECT force_events.actor
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                        ORDER BY force_events.id DESC
+                        LIMIT 1
+                    ) AS last_forced_takeover_by,
                     l.city,
                     l.summary,
                     l.manager_notes,
@@ -679,6 +720,9 @@ class SQLiteLeadRepository:
             last_customer_message_at=_parse_optional_datetime(row["last_customer_message_at"]),
             last_manager_message_at=_parse_optional_datetime(row["last_manager_message_at"]),
             needs_attention=bool(row["needs_attention"]),
+            has_forced_takeover=bool(row["has_forced_takeover"]),
+            last_forced_takeover_at=_parse_optional_datetime(row["last_forced_takeover_at"]),
+            last_forced_takeover_by=str(row["last_forced_takeover_by"] or ""),
         )
 
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[sqlite3.Row]:
@@ -710,6 +754,28 @@ class SQLiteLeadRepository:
                     c.last_customer_message_at,
                     c.last_manager_message_at,
                     c.needs_attention,
+                    EXISTS(
+                        SELECT 1
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                    ) AS has_forced_takeover,
+                    (
+                        SELECT force_events.created_at
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                        ORDER BY force_events.id DESC
+                        LIMIT 1
+                    ) AS last_forced_takeover_at,
+                    (
+                        SELECT force_events.actor
+                        FROM conversation_events force_events
+                        WHERE force_events.conversation_id = c.id
+                          AND force_events.event_type = 'force_claimed_by_supervisor'
+                        ORDER BY force_events.id DESC
+                        LIMIT 1
+                    ) AS last_forced_takeover_by,
                     l.stage,
                     l.summary,
                     l.manager_notes,
@@ -1184,6 +1250,12 @@ class JSONLeadRepository:
         lead = next(
             item for item in data["leads"] if int(item["contact_id"]) == int(conversation["contact_id"])
         )
+        forced_meta = _forced_takeover_meta(
+            [
+                row for row in data["conversation_events"]
+                if int(row["conversation_id"]) == conversation_id
+            ]
+        )
         return ConversationSnapshot(
             contact_id=int(conversation["contact_id"]),
             lead_id=int(lead["id"]),
@@ -1212,6 +1284,9 @@ class JSONLeadRepository:
             last_customer_message_at=_parse_optional_datetime(conversation.get("last_customer_message_at")),
             last_manager_message_at=_parse_optional_datetime(conversation.get("last_manager_message_at")),
             needs_attention=bool(conversation.get("needs_attention", False)),
+            has_forced_takeover=bool(forced_meta["has_forced_takeover"]),
+            last_forced_takeover_at=_parse_optional_datetime(forced_meta["last_forced_takeover_at"]),
+            last_forced_takeover_by=str(forced_meta["last_forced_takeover_by"] or ""),
         )
 
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]:
@@ -1231,6 +1306,12 @@ class JSONLeadRepository:
             contact_id = int(conversation["contact_id"])
             contact = contacts.get(contact_id, {})
             lead = leads.get(contact_id, {})
+            forced_meta = _forced_takeover_meta(
+                [
+                    row for row in data["conversation_events"]
+                    if int(row["conversation_id"]) == int(conversation["id"])
+                ]
+            )
             rows.append(
                 {
                     "id": conversation["id"],
@@ -1244,6 +1325,9 @@ class JSONLeadRepository:
                     "last_customer_message_at": conversation.get("last_customer_message_at"),
                     "last_manager_message_at": conversation.get("last_manager_message_at"),
                     "needs_attention": bool(conversation.get("needs_attention", False)),
+                    "has_forced_takeover": bool(forced_meta["has_forced_takeover"]),
+                    "last_forced_takeover_at": forced_meta["last_forced_takeover_at"],
+                    "last_forced_takeover_by": forced_meta["last_forced_takeover_by"],
                     "stage": lead.get("stage", LeadStage.NEW.value),
                     "summary": lead.get("summary", ""),
                     "manager_notes": lead.get("manager_notes", ""),

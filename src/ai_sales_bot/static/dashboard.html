@@ -573,6 +573,11 @@
               <option value="true">Нужна реакция</option>
               <option value="false">Без тревоги</option>
             </select>
+            <select id="forcedFilter">
+              <option value="">Любой takeover</option>
+              <option value="true">forced only</option>
+              <option value="false">без forced takeover</option>
+            </select>
           </div>
           <div class="filter-grid">
             <input id="ownerFilter" placeholder="Фильтр по owner" />
@@ -685,6 +690,7 @@
       modeFilter: document.getElementById("modeFilter"),
       statusFilter: document.getElementById("statusFilter"),
       attentionFilter: document.getElementById("attentionFilter"),
+      forcedFilter: document.getElementById("forcedFilter"),
       ownerFilter: document.getElementById("ownerFilter"),
       mineButton: document.getElementById("mineButton"),
       soundToggle: document.getElementById("soundToggle"),
@@ -713,6 +719,7 @@
         mode: el.modeFilter.value || "",
         status: el.statusFilter.value || "",
         attention: el.attentionFilter.value || "",
+        forced: el.forcedFilter.value || "",
         owner: el.ownerFilter.value || "",
         onlyMine: state.onlyMine,
         kpiFocus: state.kpiFocus,
@@ -733,6 +740,7 @@
         el.modeFilter.value = String(saved.mode || "");
         el.statusFilter.value = String(saved.status || "");
         el.attentionFilter.value = String(saved.attention || "");
+        el.forcedFilter.value = String(saved.forced || "");
         el.ownerFilter.value = String(saved.owner || "");
         state.onlyMine = Boolean(saved.onlyMine);
         state.kpiFocus = ["all", "urgent", "today", "overdue"].includes(String(saved.kpiFocus))
@@ -876,6 +884,7 @@
       if (el.statusFilter.value) params.set("status", el.statusFilter.value);
       if (el.searchInput.value.trim()) params.set("q", el.searchInput.value.trim());
       if (el.attentionFilter.value) params.set("needs_attention", el.attentionFilter.value);
+      if (el.forcedFilter.value) params.set("forced_only", el.forcedFilter.value);
       const owner = effectiveOwnerFilter();
       if (owner) params.set("owner", owner);
       return params.toString();
@@ -933,6 +942,13 @@
     function priorityBadge(priority) {
       const normalized = String(priority || "normal");
       return `<span class="badge priority-${escapeHtml(normalized)}">${escapeHtml(normalized)}</span>`;
+    }
+
+    function forcedBadge(item) {
+      if (!item?.has_forced_takeover) {
+        return "";
+      }
+      return `<span class="badge sla-hot">forced takeover</span>`;
     }
 
     function parseIso(value) {
@@ -1308,10 +1324,12 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
               ${ownerBadge(item.owner_name || "")}
               ${priorityBadge(item.priority || "normal")}
+              ${forcedBadge(item)}
               <span class="badge sla-${sla.level}">${escapeHtml(sla.label)}</span>
             </div>
             <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || "")}</div>
           </div>
+          ${item.has_forced_takeover ? `<div style="margin-top:8px; font-size:12px; color:var(--danger);">Последний forced takeover: ${escapeHtml(item.last_forced_takeover_by || "-")} · ${escapeHtml(item.last_forced_takeover_at || "")}</div>` : ""}
           <div style="margin-top:8px; font-size:12px; color:var(--muted);">Ожидание: ${escapeHtml(sla.age)}</div>
           <div class="item-summary">${escapeHtml(summary)}</div>
           <div class="kpi-strip">
@@ -1462,6 +1480,10 @@
       if (typeof payload === "string") {
         return payload;
       }
+      if (row.event_type === "force_claimed_by_supervisor") {
+        const previousOwner = payload.previous_owner_name || payload.previous_owner_id || "неизвестно";
+        return `forced takeover · предыдущий владелец: ${previousOwner}`;
+      }
       if (payload.text) return payload.text;
       if (payload.status) return `status=${payload.status}`;
       if (payload.mode) return `mode=${payload.mode}`;
@@ -1522,6 +1544,7 @@
           <div style="font-size:13px; color:var(--muted);">Owner: ${escapeHtml(snapshot.owner_name || "-")}${snapshot.owner_id ? ` · ${escapeHtml(snapshot.owner_id)}` : ""}</div>
           <div style="font-size:13px; color:var(--muted);">Needs attention: ${snapshot.needs_attention ? 'yes' : 'no'}</div>
           <div style="font-size:13px; color:var(--muted);">Ваш доступ: ${escapeHtml(currentOperatorRole())}${canForceTakeover() ? " · можно принудительно перехватывать" : " · чужие диалоги доступны только для просмотра"}</div>
+          <div style="font-size:13px; color:var(--muted);">Forced takeover audit: ${snapshot.has_forced_takeover ? `да · ${escapeHtml(snapshot.last_forced_takeover_by || "-")} · ${escapeHtml(snapshot.last_forced_takeover_at || "")}` : "нет"}</div>
         </div>
         <div class="detail-block">
           <div class="detail-label">Lead card</div>
@@ -1570,7 +1593,7 @@
           <div class="detail-label">Журнал событий</div>
           <div class="event-list">
             ${events.length ? events.map((row) => `
-              <div class="event-row">
+              <div class="event-row" style="${row.event_type === 'force_claimed_by_supervisor' ? 'border-color:#dcae9d;background:#fff1eb;' : ''}">
                 <div><strong>${escapeHtml(row.event_type || 'event')}</strong></div>
                 <div style="color:var(--muted); margin-top:4px;">${escapeHtml(row.actor || '-')} · ${escapeHtml(row.created_at || '')}</div>
                 ${eventPayload(row) ? `<div style="margin-top:6px;">${escapeHtml(eventPayload(row))}</div>` : ''}
@@ -1894,7 +1917,7 @@
       localStorage.setItem(browserNotifyStorageKey, String(state.browserNotifyEnabled));
       renderAlertToggles();
     });
-    [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter, el.ownerFilter].forEach((node) => {
+    [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter, el.forcedFilter, el.ownerFilter].forEach((node) => {
       node.addEventListener("change", applyFilters);
       if (node === el.searchInput || node === el.ownerFilter) {
         node.addEventListener("keyup", async (event) => {

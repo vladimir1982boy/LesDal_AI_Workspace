@@ -104,3 +104,6 @@ class ConversationSnapshot:
     last_customer_message_at: datetime | None = None
     last_manager_message_at: datetime | None = None
     needs_attention: bool = False
+    has_forced_takeover: bool = False
+    last_forced_takeover_at: datetime | None = None
+    last_forced_takeover_by: str = ""

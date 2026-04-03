@@ -138,6 +138,24 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertEqual(event["event_type"], "claimed")
         self.assertEqual(event["actor"], "manager")
 
+    def test_sqlite_recent_conversations_include_forced_takeover_audit(self) -> None:
+        repo = SQLiteLeadRepository(self.sqlite_path)
+        snapshot = self._ingest(repo)
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="force_claimed_by_supervisor",
+            actor="Lead",
+            payload={"previous_owner_id": "alice"},
+        )
+
+        row = dict(repo.list_recent_conversations(limit=1)[0])
+        refreshed = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertTrue(row["has_forced_takeover"])
+        self.assertEqual(row["last_forced_takeover_by"], "Lead")
+        self.assertTrue(refreshed.has_forced_takeover)
+        self.assertEqual(refreshed.last_forced_takeover_by, "Lead")
+
     def test_json_can_store_and_list_conversation_events(self) -> None:
         repo = JSONLeadRepository(self.json_path)
         snapshot = self._ingest(repo)
@@ -154,6 +172,24 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         event = rows[0]
         self.assertEqual(event["event_type"], "claimed")
         self.assertEqual(event["actor"], "manager")
+
+    def test_json_recent_conversations_include_forced_takeover_audit(self) -> None:
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = self._ingest(repo)
+        repo.add_conversation_event(
+            conversation_id=snapshot.conversation_id,
+            event_type="force_claimed_by_supervisor",
+            actor="Lead",
+            payload={"previous_owner_id": "alice"},
+        )
+
+        row = repo.list_recent_conversations(limit=1)[0]
+        refreshed = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertTrue(row["has_forced_takeover"])
+        self.assertEqual(row["last_forced_takeover_by"], "Lead")
+        self.assertTrue(refreshed.has_forced_takeover)
+        self.assertEqual(refreshed.last_forced_takeover_by, "Lead")
 
     def _ingest(self, repo: SQLiteLeadRepository | JSONLeadRepository):
         return repo.ingest_customer_message(

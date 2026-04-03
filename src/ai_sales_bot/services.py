@@ -384,6 +384,7 @@ class SalesBotService:
         owner: str = "",
         q: str = "",
         needs_attention: bool | None = None,
+        forced_only: bool | None = None,
     ) -> list[dict]:
         rows = self.repository.list_recent_conversations(limit=limit)
         items = [dict(row) for row in rows]
@@ -420,6 +421,12 @@ class SalesBotService:
                 row
                 for row in items
                 if bool(row.get("needs_attention", False)) == needs_attention
+            ]
+        if forced_only is not None:
+            items = [
+                row
+                for row in items
+                if bool(row.get("has_forced_takeover", False)) == forced_only
             ]
         return items[:limit]
 

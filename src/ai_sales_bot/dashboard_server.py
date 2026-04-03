@@ -122,6 +122,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                             owner=self._query_str(parsed.query, "owner"),
                             q=self._query_str(parsed.query, "q"),
                             needs_attention=self._query_bool(parsed.query, "needs_attention"),
+                            forced_only=self._query_bool(parsed.query, "forced_only"),
                         )
                     }
                 )

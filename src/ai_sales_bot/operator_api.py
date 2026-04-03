@@ -81,6 +81,7 @@ class OperatorInboxAPI:
         owner: str = "",
         q: str = "",
         needs_attention: bool | None = None,
+        forced_only: bool | None = None,
     ) -> list[dict[str, Any]]:
         rows = self.service.list_recent_conversations(
             limit=limit,
@@ -90,6 +91,7 @@ class OperatorInboxAPI:
             owner=owner,
             q=q,
             needs_attention=needs_attention,
+            forced_only=forced_only,
         )
         return [
             {
