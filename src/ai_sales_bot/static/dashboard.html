@@ -1067,7 +1067,30 @@
       return (events || []).find((row) => (row.event_type || "") === "lock_expired") || null;
     }
 
+    function formatStatusLabel(value) {
+      const normalized = String(value || "").trim();
+      const labels = {
+        new: "новый",
+        in_progress: "в работе",
+        waiting_manager: "ждет менеджера",
+        closed: "закрыт",
+      };
+      return labels[normalized] || normalized || "не указан";
+    }
+
+    function formatModeLabel(value) {
+      const normalized = String(value || "").trim();
+      const labels = {
+        ai: "AI",
+        manager: "manager",
+      };
+      return labels[normalized] || normalized || "не указан";
+    }
+
     function describeApiError(error) {
+      const payload = error?.payload || {};
+      const ownerLabel = payload.owner_name || payload.owner_id || "другой оператор";
+      const statusLabel = payload.status ? formatStatusLabel(payload.status) : "";
       if (error?.reason === "session_expired" || error?.status === 401) {
         return {
           text: "Сессия оператора истекла. Войдите снова, чтобы продолжить работу.",
@@ -1075,11 +1098,46 @@
           kind: "session",
         };
       }
+      if (error?.reason === "operator_session_required") {
+        return {
+          text: "Сначала войдите как оператор, чтобы открыть inbox и выполнять действия.",
+          tone: "warning",
+          kind: "session",
+        };
+      }
+      if (error?.reason === "dashboard_token_invalid") {
+        return {
+          text: "Dashboard token не принят. Проверьте ссылку или настройки доступа.",
+          tone: "error",
+          kind: "auth",
+        };
+      }
       if (error?.reason === "ownership_expired") {
         return {
-          text: "Ownership истёк. Обновите карточку и возьмите диалог заново.",
+          text: "Закрепление истекло. Обновите карточку и перехватите диалог заново перед действием.",
           tone: "warning",
           kind: "ownership_expired",
+        };
+      }
+      if (error?.reason === "owned_by_other") {
+        return {
+          text: `Диалог сейчас закреплен за ${ownerLabel}${statusLabel ? ` · статус: ${statusLabel}` : ""}.`,
+          tone: "error",
+          kind: "ownership_conflict",
+        };
+      }
+      if (error?.reason === "forbidden_force_takeover") {
+        return {
+          text: "Принудительный перехват доступен только supervisor.",
+          tone: "error",
+          kind: "forbidden",
+        };
+      }
+      if (error?.reason === "validation_error") {
+        return {
+          text: error?.message || "Проверьте заполнение полей и повторите попытку.",
+          tone: "error",
+          kind: "validation",
         };
       }
       if (error?.status === 409) {
@@ -2014,24 +2072,24 @@
       if (!payload) return "";
       if (row.event_type === "force_claimed_by_supervisor") {
         const previousOwner = payload.previous_owner_name || payload.previous_owner_id || "неизвестно";
-        return `forced takeover · предыдущий владелец: ${previousOwner}`;
+        return `Принудительный перехват · предыдущий владелец: ${previousOwner}`;
       }
       if (row.event_type === "lock_expired") {
         const previousOwner = payload.previous_owner_name || payload.previous_owner_id || "неизвестный владелец";
-        return `ownership expired · прошлый владелец: ${previousOwner}`;
+        return `Закрепление истекло · прошлый владелец: ${previousOwner}`;
       }
       if (row.event_type === "reply_send_failed") {
-        return `delivery failed · ${payload.channel || "channel"} · ${payload.error || "без текста ошибки"}`;
+        return `Доставка не удалась · ${payload.channel || "канал"} · ${payload.error || "без текста ошибки"}`;
       }
       if (row.event_type === "reply_send_retried") {
-        return `retry requested · ${payload.channel || "channel"} · delivery_key=${payload.delivery_key || "-"}`;
+        return `Запрошена повторная отправка · ${payload.channel || "канал"} · delivery_key=${payload.delivery_key || "-"}`;
       }
       if (row.event_type === "reply_send_succeeded") {
-        return `delivery succeeded · ${payload.channel || "channel"}${payload.message_id ? ` · message_id=${payload.message_id}` : ""}`;
+        return `Доставка подтверждена · ${payload.channel || "канал"}${payload.message_id ? ` · message_id=${payload.message_id}` : ""}`;
       }
       if (payload.text) return payload.text;
-      if (payload.status) return `status=${payload.status}`;
-      if (payload.mode) return `mode=${payload.mode}`;
+      if (payload.status) return `Статус: ${formatStatusLabel(payload.status)}`;
+      if (payload.mode) return `Режим: ${formatModeLabel(payload.mode)}`;
       return JSON.stringify(payload);
     }
 
@@ -2249,7 +2307,7 @@
         return;
       }
       el.title.textContent = `${snapshot.display_name || snapshot.username || `Диалог ${snapshot.conversation_id}`}`;
-      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · mode ${snapshot.mode} · status ${snapshot.status} · owner ${snapshot.owner_name || snapshot.owner_id || '-'}`;
+      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · режим ${formatModeLabel(snapshot.mode)} · статус ${formatStatusLabel(snapshot.status)} · owner ${snapshot.owner_name || snapshot.owner_id || '-'}`;
     }
 
     function renderComposer() {

@@ -468,8 +468,27 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
             except ConversationOwnershipError as exc:
+                owner_name = ""
+                owner_id = ""
+                snapshot_mode = ""
+                snapshot_status = ""
+                try:
+                    snapshot = api.service.get_snapshot(conversation_id)
+                    owner_name = str(getattr(snapshot, "owner_name", "") or "")
+                    owner_id = str(getattr(snapshot, "owner_id", "") or "")
+                    snapshot_mode = str(getattr(getattr(snapshot, "mode", ""), "value", getattr(snapshot, "mode", "")) or "")
+                    snapshot_status = str(getattr(getattr(snapshot, "status", ""), "value", getattr(snapshot, "status", "")) or "")
+                except Exception:
+                    pass
                 self._send_json(
-                    _error_payload(str(exc), reason=getattr(exc, "reason", "owned_by_other")),
+                    _error_payload(
+                        str(exc),
+                        reason=getattr(exc, "reason", "owned_by_other"),
+                        owner_name=owner_name,
+                        owner_id=owner_id,
+                        mode=snapshot_mode,
+                        status=snapshot_status,
+                    ),
                     status=HTTPStatus.CONFLICT,
                 )
                 return

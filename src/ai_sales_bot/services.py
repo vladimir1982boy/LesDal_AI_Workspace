@@ -15,6 +15,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _owner_label(*, owner_id: str = "", owner_name: str = "") -> str:
+    label = str(owner_name or owner_id or "").strip()
+    return label or "another operator"
+
+
 class ConversationOwnershipError(RuntimeError):
     def __init__(self, message: str, *, reason: str = "owned_by_other") -> None:
         super().__init__(message)
@@ -402,12 +407,12 @@ class SalesBotService:
         resolved_delivery_key = delivery_key.strip() or secrets.token_urlsafe(12)
         if pause_ai and owner_id and operator_id and owner_id != operator_id and not ownership_expired:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name or owner_id}",
+                f"Conversation is already owned by {_owner_label(owner_id=owner_id, owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         if pause_ai and not owner_id and owner_name and owner_name != manager_name and not ownership_expired:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name}",
+                f"Conversation is already owned by {_owner_label(owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         if pause_ai:
@@ -673,12 +678,12 @@ class SalesBotService:
         forced_reassign = False
         if existing_owner_id and operator_id and existing_owner_id != operator_id and not force and not ownership_expired:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name or existing_owner_id}",
+                f"Conversation is already owned by {_owner_label(owner_id=existing_owner_id, owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         if not existing_owner_id and owner_name and owner_name != operator_name and not force and not ownership_expired:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name}",
+                f"Conversation is already owned by {_owner_label(owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         if force and not ownership_expired and (
@@ -756,12 +761,12 @@ class SalesBotService:
             )
         if existing_owner_id and operator_id and existing_owner_id != operator_id:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name or existing_owner_id}",
+                f"Conversation is already owned by {_owner_label(owner_id=existing_owner_id, owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         if not existing_owner_id and owner_name and owner_name != operator_name:
             raise ConversationOwnershipError(
-                f"Conversation is already owned by {owner_name}",
+                f"Conversation is already owned by {_owner_label(owner_name=owner_name)}",
                 reason="owned_by_other",
             )
         next_status = (
