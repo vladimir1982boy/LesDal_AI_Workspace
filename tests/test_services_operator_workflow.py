@@ -62,7 +62,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(self.repo.events[-1]["event_type"], "claimed_by_manager")
 
     def test_record_manager_reply_rejects_foreign_owner(self) -> None:
-        with self.assertRaises(ConversationOwnershipError):
+        with self.assertRaises(ConversationOwnershipError) as ctx:
             self.service.record_manager_reply(
                 conversation_id=3,
                 manager_name="Bob",
@@ -70,6 +70,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 text="Reply from wrong owner",
                 pause_ai=True,
             )
+        self.assertEqual(ctx.exception.reason, "owned_by_other")
 
     def test_force_claim_reassigns_foreign_owner(self) -> None:
         snapshot = self.service.claim_conversation(
@@ -231,12 +232,25 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(self.repo.events[-1]["event_type"], "released_by_manager")
 
     def test_release_rejects_foreign_owner(self) -> None:
-        with self.assertRaises(ConversationOwnershipError):
+        with self.assertRaises(ConversationOwnershipError) as ctx:
             self.service.release_conversation(
                 conversation_id=3,
                 operator_name="Bob",
                 operator_id="bob",
             )
+        self.assertEqual(ctx.exception.reason, "owned_by_other")
+
+    def test_release_returns_ownership_expired_reason_for_stale_foreign_owner(self) -> None:
+        self.snapshot.owner_claimed_at = datetime.now(timezone.utc) - timedelta(hours=3)
+
+        with self.assertRaises(ConversationOwnershipError) as ctx:
+            self.service.release_conversation(
+                conversation_id=3,
+                operator_name="Bob",
+                operator_id="bob",
+            )
+
+        self.assertEqual(ctx.exception.reason, "ownership_expired")
 
     def test_update_manager_notes_persists_and_logs_event(self) -> None:
         snapshot = self.service.update_manager_notes(

@@ -23,7 +23,9 @@ def _read_dashboard_html() -> bytes:
 
 
 class DashboardPermissionError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, reason: str = "forbidden") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _utcnow() -> datetime:
@@ -67,7 +69,10 @@ def _resolve_force_claim(snapshot, operator: dict[str, object] | None, requested
     if not _is_foreign_owner(snapshot, operator):
         return False
     if not _can_force_takeover(operator):
-        raise DashboardPermissionError("Only supervisors can force takeover of another operator's dialog")
+        raise DashboardPermissionError(
+            "Only supervisors can force takeover of another operator's dialog",
+            reason="forbidden_force_takeover",
+        )
     return True
 
 
@@ -91,6 +96,15 @@ def _operator_action_payload(api: OperatorInboxAPI, conversation_id: int, result
             "delivery_key": str(result.reply_delivery_key or ""),
         },
     }
+
+
+def _error_payload(error: str, *, reason: str, **extra: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "error": error,
+        "reason": reason,
+    }
+    payload.update(extra)
+    return payload
 
 
 def _session_is_expired(session: dict[str, object], *, ttl_minutes: int, now: datetime | None = None) -> bool:
@@ -160,10 +174,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 return operator
             expired = bool(getattr(self, "_operator_session_expired", False))
             self._send_json(
-                {
-                    "error": "Session expired" if expired else "Operator session required",
-                    "reason": "session_expired" if expired else "operator_session_required",
-                },
+                _error_payload(
+                    "Session expired" if expired else "Operator session required",
+                    reason="session_expired" if expired else "operator_session_required",
+                ),
                 status=HTTPStatus.UNAUTHORIZED,
             )
             return None
@@ -196,10 +210,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 operator = self._current_operator()
                 if operator is None:
                     self._send_json(
-                        {
-                            "error": "Session expired" if getattr(self, "_operator_session_expired", False) else "Operator session required",
-                            "reason": "session_expired" if getattr(self, "_operator_session_expired", False) else "operator_session_required",
-                        },
+                        _error_payload(
+                            "Session expired" if getattr(self, "_operator_session_expired", False) else "Operator session required",
+                            reason="session_expired" if getattr(self, "_operator_session_expired", False) else "operator_session_required",
+                        ),
                         status=HTTPStatus.UNAUTHORIZED,
                     )
                     return
@@ -268,10 +282,16 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 pin = str(payload.get("pin") or "").strip()
                 operator = operator_registry.get(operator_id)
                 if operator is None:
-                    self._send_json({"error": "Unknown operator"}, status=HTTPStatus.UNAUTHORIZED)
+                    self._send_json(
+                        _error_payload("Unknown operator", reason="invalid_operator"),
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
                     return
                 if operator.pin and operator.pin != pin:
-                    self._send_json({"error": "Invalid PIN"}, status=HTTPStatus.UNAUTHORIZED)
+                    self._send_json(
+                        _error_payload("Invalid PIN", reason="invalid_pin"),
+                        status=HTTPStatus.UNAUTHORIZED,
+                    )
                     return
                 session_token = secrets.token_urlsafe(24)
                 operator_payload = _operator_payload(operator)
@@ -346,7 +366,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     text = str(payload.get("text") or "").strip()
                     pause_ai = bool(payload.get("pause_ai", True))
                     if not text:
-                        self._send_json({"error": "Text is required"}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            _error_payload("Text is required", reason="validation_error"),
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
                         return
                     result = api.reply_to_conversation(
                         conversation_id,
@@ -362,7 +385,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     payload = self._read_json()
                     delivery_key = str(payload.get("delivery_key") or "").strip()
                     if not delivery_key:
-                        self._send_json({"error": "delivery_key is required"}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            _error_payload("delivery_key is required", reason="validation_error"),
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
                         return
                     result = api.retry_reply_delivery(
                         conversation_id,
@@ -377,7 +403,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     payload = self._read_json()
                     status = str(payload.get("status") or "").strip()
                     if not status:
-                        self._send_json({"error": "Status is required"}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            _error_payload("Status is required", reason="validation_error"),
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
                         return
                     result = api.set_status(
                         conversation_id,
@@ -409,10 +438,16 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     next_action = str(payload.get("next_action") or "").strip()
                     raw_tags = payload.get("tags") or []
                     if not stage:
-                        self._send_json({"error": "Stage is required"}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            _error_payload("Stage is required", reason="validation_error"),
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
                         return
                     if not priority:
-                        self._send_json({"error": "Priority is required"}, status=HTTPStatus.BAD_REQUEST)
+                        self._send_json(
+                            _error_payload("Priority is required", reason="validation_error"),
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
                         return
                     tags = [
                         str(item).strip()
@@ -430,26 +465,32 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
             except ConversationOwnershipError as exc:
-                self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+                self._send_json(
+                    _error_payload(str(exc), reason=getattr(exc, "reason", "owned_by_other")),
+                    status=HTTPStatus.CONFLICT,
+                )
                 return
             except DashboardPermissionError as exc:
-                self._send_json({"error": str(exc)}, status=HTTPStatus.FORBIDDEN)
+                self._send_json(
+                    _error_payload(str(exc), reason=getattr(exc, "reason", "forbidden")),
+                    status=HTTPStatus.FORBIDDEN,
+                )
                 return
             except (LeadProfileValidationError, ValueError) as exc:
-                self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                self._send_json(
+                    _error_payload(str(exc), reason="validation_error"),
+                    status=HTTPStatus.BAD_REQUEST,
+                )
                 return
             except Exception as exc:
                 logger.exception("Dashboard action failed")
-                self._send_json({"error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                self._send_json(
+                    _error_payload(str(exc), reason="server_error"),
+                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
                 return
 
             self._send_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
@@ -471,7 +512,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
             if query_token == token:
                 return True
 
-            self._send_json({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            self._send_json(
+                _error_payload("Unauthorized", reason="dashboard_token_invalid"),
+                status=HTTPStatus.UNAUTHORIZED,
+            )
             return False
 
         def _send_json(self, payload: dict, *, status: HTTPStatus = HTTPStatus.OK) -> None:

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from src.ai_sales_bot.dashboard_server import (
     DashboardPermissionError,
+    _error_payload,
     _operator_action_payload,
     _can_force_takeover,
     _consume_operator_session,
@@ -46,8 +47,9 @@ class DashboardServerPermissionTests(unittest.TestCase):
         self.assertFalse(_is_foreign_owner(self.unowned_snapshot, self.manager))
 
     def test_resolve_force_claim_rejects_manager_for_foreign_dialog(self) -> None:
-        with self.assertRaises(DashboardPermissionError):
+        with self.assertRaises(DashboardPermissionError) as ctx:
             _resolve_force_claim(self.foreign_snapshot, self.manager, requested_force=True)
+        self.assertEqual(ctx.exception.reason, "forbidden_force_takeover")
 
     def test_resolve_force_claim_allows_supervisor_for_foreign_dialog(self) -> None:
         self.assertTrue(_resolve_force_claim(self.foreign_snapshot, self.supervisor, requested_force=True))
@@ -121,6 +123,22 @@ class DashboardServerSessionTests(unittest.TestCase):
 
 
 class DashboardServerPayloadTests(unittest.TestCase):
+    def test_error_payload_keeps_reason_and_extra_fields(self) -> None:
+        payload = _error_payload(
+            "Conversation is already owned by Alice",
+            reason="owned_by_other",
+            owner="Alice",
+        )
+
+        self.assertEqual(
+            payload,
+            {
+                "error": "Conversation is already owned by Alice",
+                "reason": "owned_by_other",
+                "owner": "Alice",
+            },
+        )
+
     def test_operator_action_payload_includes_structured_outbound_result(self) -> None:
         api = SimpleNamespace(
             get_conversation=lambda conversation_id: {
