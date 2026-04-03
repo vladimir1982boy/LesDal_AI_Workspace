@@ -4,7 +4,8 @@ import unittest
 from types import SimpleNamespace
 
 from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadPriority, LeadStage
-from src.ai_sales_bot.operator_api import OperatorInboxAPI
+from src.ai_sales_bot.operator_api import OperatorInboxAPI, serialize_outbound_result
+from src.ai_sales_bot.outbound import OutboundSendResult
 
 
 class OperatorInboxAPITests(unittest.TestCase):
@@ -40,10 +41,45 @@ class OperatorInboxAPITests(unittest.TestCase):
         )
 
         self.assertTrue(result.outbound_sent)
+        self.assertEqual(
+            serialize_outbound_result(result.outbound_result),
+            {
+                "ok": True,
+                "channel": "vk",
+                "error": "",
+                "retryable": False,
+                "message_id": "fake-vk-id",
+            },
+        )
+        self.assertIsNotNone(result.outbound_result)
+        self.assertEqual(result.outbound_result.channel, Channel.VK)
         self.assertEqual(self.dispatcher.sent[0]["channel"], Channel.VK)
         self.assertEqual(self.dispatcher.sent[0]["external_chat_id"], "42")
         self.assertEqual(self.service.recorded_manager_reply["text"], "Manager reply")
         self.assertEqual(self.service.recorded_manager_reply["operator_id"], "alice")
+
+    def test_reply_keeps_saved_snapshot_when_outbound_fails(self) -> None:
+        self.dispatcher.next_result = OutboundSendResult(
+            ok=False,
+            channel=Channel.VK,
+            error="network timeout",
+            retryable=True,
+        )
+
+        result = self.api.reply_to_conversation(
+            3,
+            text="Manager reply",
+            pause_ai=True,
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.assertFalse(result.outbound_sent)
+        self.assertIsNotNone(result.outbound_result)
+        self.assertEqual(result.outbound_result.error, "network timeout")
+        self.assertTrue(result.outbound_result.retryable)
+        self.assertEqual(self.service.recorded_manager_reply["text"], "Manager reply")
+        self.assertEqual(result.snapshot.owner_id, "alice")
 
     def test_pause_conversation_switches_mode(self) -> None:
         result = self.api.pause_conversation(3)
@@ -158,6 +194,16 @@ class OperatorInboxAPITests(unittest.TestCase):
         result = self.api.resume_conversation(3, notify_customer=True)
 
         self.assertTrue(result.outbound_sent)
+        self.assertEqual(
+            serialize_outbound_result(result.outbound_result),
+            {
+                "ok": True,
+                "channel": "vk",
+                "error": "",
+                "retryable": False,
+                "message_id": "fake-vk-id",
+            },
+        )
         self.assertEqual(self.service.resume_called_with, 3)
         self.assertIn("Снова с вами", self.dispatcher.sent[-1]["text"])
 
@@ -170,10 +216,15 @@ class _FakeConfig:
 class _FakeDispatcher:
     def __init__(self) -> None:
         self.sent: list[dict] = []
+        self.next_result = OutboundSendResult(
+            ok=True,
+            channel=Channel.VK,
+            message_id="fake-vk-id",
+        )
 
-    def send_text(self, **kwargs) -> bool:
+    def send_text(self, **kwargs) -> OutboundSendResult:
         self.sent.append(kwargs)
-        return True
+        return self.next_result
 
 
 class _FakeLeadSync:

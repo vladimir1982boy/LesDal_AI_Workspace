@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from src.ai_sales_bot.dashboard_server import (
     DashboardPermissionError,
+    _operator_action_payload,
     _can_force_takeover,
     _consume_operator_session,
     _create_operator_session,
@@ -14,6 +15,7 @@ from src.ai_sales_bot.dashboard_server import (
     _session_is_expired,
 )
 from src.ai_sales_bot.config import DashboardOperator
+from src.ai_sales_bot.outbound import OutboundSendResult
 
 
 class DashboardServerPermissionTests(unittest.TestCase):
@@ -116,6 +118,40 @@ class DashboardServerSessionTests(unittest.TestCase):
         self.assertIsNone(payload)
         self.assertTrue(expired)
         self.assertEqual(sessions, {})
+
+
+class DashboardServerPayloadTests(unittest.TestCase):
+    def test_operator_action_payload_includes_structured_outbound_result(self) -> None:
+        api = SimpleNamespace(
+            get_conversation=lambda conversation_id: {
+                "snapshot": {"conversation_id": conversation_id, "status": "in_progress"},
+            }
+        )
+        result = SimpleNamespace(
+            outbound_sent=False,
+            outbound_result=OutboundSendResult(
+                ok=False,
+                channel=SimpleNamespace(value="vk"),
+                error="network timeout",
+                retryable=True,
+            ),
+        )
+
+        payload = _operator_action_payload(api, 3, result)
+
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["outbound_sent"])
+        self.assertEqual(payload["snapshot"]["conversation_id"], 3)
+        self.assertEqual(
+            payload["outbound"],
+            {
+                "ok": False,
+                "channel": "vk",
+                "error": "network timeout",
+                "retryable": True,
+                "message_id": "",
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .app import SalesBotRuntime, create_runtime
-from .operator_api import OperatorInboxAPI
+from .operator_api import OperatorInboxAPI, serialize_outbound_result
 from .services import ConversationOwnershipError, LeadProfileValidationError
 
 
@@ -77,6 +77,15 @@ def _create_operator_session(operator, *, now: datetime | None = None) -> dict[s
         "operator": _operator_payload(operator),
         "created_at": issued_at,
         "last_seen_at": issued_at,
+    }
+
+
+def _operator_action_payload(api: OperatorInboxAPI, conversation_id: int, result) -> dict[str, object]:
+    return {
+        "ok": True,
+        "snapshot": api.get_conversation(conversation_id)["snapshot"],
+        "outbound_sent": result.outbound_sent,
+        "outbound": serialize_outbound_result(result.outbound_result),
     }
 
 
@@ -297,13 +306,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "claim":
@@ -317,13 +320,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_id=operator["operator_id"],
                         force=force,
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "release":
@@ -332,24 +329,12 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "resume":
                     result = api.resume_conversation(conversation_id)
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "reply":
@@ -366,13 +351,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "status":
@@ -387,13 +366,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "notes":
@@ -405,13 +378,7 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )
-                    self._send_json(
-                        {
-                            "ok": True,
-                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
-                            "outbound_sent": result.outbound_sent,
-                        }
-                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
                     return
 
                 if action == "profile":

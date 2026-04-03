@@ -7,7 +7,7 @@ from typing import Any
 from .app import SalesBotRuntime, create_runtime
 from .domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadPriority, LeadStage
 from .lead_sync import LeadSyncCoordinator
-from .outbound import OutboundDispatcher
+from .outbound import OutboundDispatcher, OutboundSendResult
 from .services import ConversationOwnershipError
 
 
@@ -50,10 +50,26 @@ def serialize_snapshot(snapshot: ConversationSnapshot) -> dict[str, Any]:
     }
 
 
+def serialize_outbound_result(result: OutboundSendResult | None) -> dict[str, Any] | None:
+    if result is None:
+        return None
+    return {
+        "ok": result.ok,
+        "channel": result.channel.value,
+        "error": result.error,
+        "retryable": result.retryable,
+        "message_id": result.message_id,
+    }
+
+
 @dataclass(slots=True)
 class OperatorActionResult:
     snapshot: ConversationSnapshot
-    outbound_sent: bool = False
+    outbound_result: OutboundSendResult | None = None
+
+    @property
+    def outbound_sent(self) -> bool:
+        return bool(self.outbound_result and self.outbound_result.ok)
 
 
 class OperatorInboxAPI:
@@ -191,10 +207,10 @@ class OperatorInboxAPI:
 
     def resume_conversation(self, conversation_id: int, *, notify_customer: bool = True) -> OperatorActionResult:
         snapshot = self.service.resume_ai(conversation_id=conversation_id)
-        outbound_sent = False
+        outbound_result: OutboundSendResult | None = None
         if notify_customer:
             target = self.service.get_conversation_target(conversation_id)
-            outbound_sent = self.dispatcher.send_text(
+            outbound_result = self.dispatcher.send_text(
                 channel=Channel(target["channel"]),
                 external_chat_id=str(target["external_chat_id"]),
                 external_user_id=str(target["external_user_id"]),
@@ -204,7 +220,7 @@ class OperatorInboxAPI:
                 ),
             )
         self.lead_sync.sync_snapshot(snapshot)
-        return OperatorActionResult(snapshot=snapshot, outbound_sent=outbound_sent)
+        return OperatorActionResult(snapshot=snapshot, outbound_result=outbound_result)
 
     def release_conversation(
         self,
@@ -230,13 +246,6 @@ class OperatorInboxAPI:
         operator_name: str | None = None,
         operator_id: str = "",
     ) -> OperatorActionResult:
-        target = self.service.get_conversation_target(conversation_id)
-        outbound_sent = self.dispatcher.send_text(
-            channel=Channel(target["channel"]),
-            external_chat_id=str(target["external_chat_id"]),
-            external_user_id=str(target["external_user_id"]),
-            text=text,
-        )
         snapshot = self.service.record_manager_reply(
             conversation_id=conversation_id,
             manager_name=operator_name or self.config.manager_name,
@@ -244,8 +253,15 @@ class OperatorInboxAPI:
             text=text,
             pause_ai=pause_ai,
         )
+        target = self.service.get_conversation_target(conversation_id)
+        outbound_result = self.dispatcher.send_text(
+            channel=Channel(target["channel"]),
+            external_chat_id=str(target["external_chat_id"]),
+            external_user_id=str(target["external_user_id"]),
+            text=text,
+        )
         self.lead_sync.sync_snapshot(snapshot)
-        return OperatorActionResult(snapshot=snapshot, outbound_sent=outbound_sent)
+        return OperatorActionResult(snapshot=snapshot, outbound_result=outbound_result)
 
     def set_status(
         self,
