@@ -141,6 +141,46 @@
       text-align: center;
       line-height: 1.4;
     }
+    .risk-board {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px;
+      background: linear-gradient(180deg, rgba(255, 244, 228, 0.92), rgba(255, 255, 255, 0.92));
+    }
+    .risk-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .risk-chip {
+      border: 1px solid var(--line);
+      background: white;
+      color: #5e5348;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .risk-chip.active {
+      background: #f7dfd5;
+      border-color: #dcae9d;
+      color: #8a3a26;
+    }
+    .risk-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .risk-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
     .archive-strip {
       grid-column: 1 / -1;
       border: 1px dashed var(--line);
@@ -518,6 +558,12 @@
             <button id="soundToggle" class="ghost">Звук: выкл</button>
             <button id="notifyToggle" class="ghost">Браузер: выкл</button>
           </div>
+          <div class="filter-grid">
+            <button id="riskAllButton" class="ghost">KPI: все риски</button>
+            <button id="riskUrgentButton" class="ghost">urgent only</button>
+            <button id="riskTodayButton" class="ghost">follow-up today</button>
+            <button id="riskOverdueButton" class="ghost">overdue</button>
+          </div>
         </div>
       </div>
       <div id="conversationList" class="queue-board"></div>
@@ -576,6 +622,7 @@
       selectedId: null,
       detail: null,
       onlyMine: false,
+      kpiFocus: "all",
       soundEnabled: localStorage.getItem(soundStorageKey) === "true",
       browserNotifyEnabled: localStorage.getItem(browserNotifyStorageKey) === "true",
       alertingUntil: 0,
@@ -608,6 +655,10 @@
       mineButton: document.getElementById("mineButton"),
       soundToggle: document.getElementById("soundToggle"),
       notifyToggle: document.getElementById("notifyToggle"),
+      riskAllButton: document.getElementById("riskAllButton"),
+      riskUrgentButton: document.getElementById("riskUrgentButton"),
+      riskTodayButton: document.getElementById("riskTodayButton"),
+      riskOverdueButton: document.getElementById("riskOverdueButton"),
     };
 
     el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
@@ -783,6 +834,70 @@
         return { label: "завтра", level: "fresh" };
       }
       return { label: raw, level: "cold" };
+    }
+
+    function riskBuckets(items) {
+      const urgent = [];
+      const today = [];
+      const overdue = [];
+      items.forEach((item) => {
+        const priority = String(item.priority || "normal");
+        const followUp = followUpSnapshot(item);
+        if (priority === "urgent") {
+          urgent.push(item);
+        }
+        if (followUp.label === "сегодня") {
+          today.push(item);
+        }
+        if (followUp.level === "hot") {
+          overdue.push(item);
+        }
+      });
+      return { urgent, today, overdue };
+    }
+
+    function matchesKpiFocus(item) {
+      if (state.kpiFocus === "all") {
+        return true;
+      }
+      const buckets = riskBuckets([item]);
+      if (state.kpiFocus === "urgent") {
+        return buckets.urgent.length > 0;
+      }
+      if (state.kpiFocus === "today") {
+        return buckets.today.length > 0;
+      }
+      if (state.kpiFocus === "overdue") {
+        return buckets.overdue.length > 0;
+      }
+      return true;
+    }
+
+    function riskSectionTitle() {
+      if (state.kpiFocus === "urgent") return "Фокус: urgent only";
+      if (state.kpiFocus === "today") return "Фокус: follow-up today";
+      if (state.kpiFocus === "overdue") return "Фокус: overdue";
+      return "Фокус по KPI";
+    }
+
+    function riskFocusItems(items) {
+      const buckets = riskBuckets(items);
+      if (state.kpiFocus === "urgent") {
+        return buckets.urgent;
+      }
+      if (state.kpiFocus === "today") {
+        return buckets.today;
+      }
+      if (state.kpiFocus === "overdue") {
+        return buckets.overdue;
+      }
+      const map = new Map();
+      [...buckets.urgent, ...buckets.overdue, ...buckets.today].forEach((item) => {
+        if (!map.has(item.id)) {
+          map.set(item.id, item);
+        }
+      });
+      return [...map.values()];
     }
 
     function shortenText(value, maxLength = 64) {
@@ -1026,10 +1141,56 @@
       `;
     }
 
+    function renderRiskBoard(items) {
+      const buckets = riskBuckets(items);
+      const focusItems = riskFocusItems(items).slice(0, 6);
+      const allRiskCount = riskFocusItems(items).length;
+      return `
+        <section class="risk-board">
+          <div class="queue-title">
+            <span>${riskSectionTitle()}</span>
+            <span class="queue-count">${focusItems.length}</span>
+          </div>
+          <div class="risk-note">Быстрый фильтр по управленческим рискам. Выбор KPI влияет и на мини-очередь, и на основные колонки ниже.</div>
+          <div class="risk-toolbar">
+            <button class="risk-chip ${state.kpiFocus === "all" ? "active" : ""}" data-risk-focus="all">Все риски · ${allRiskCount}</button>
+            <button class="risk-chip ${state.kpiFocus === "urgent" ? "active" : ""}" data-risk-focus="urgent">urgent only · ${buckets.urgent.length}</button>
+            <button class="risk-chip ${state.kpiFocus === "today" ? "active" : ""}" data-risk-focus="today">follow-up today · ${buckets.today.length}</button>
+            <button class="risk-chip ${state.kpiFocus === "overdue" ? "active" : ""}" data-risk-focus="overdue">overdue · ${buckets.overdue.length}</button>
+          </div>
+          <div class="risk-items">
+            ${focusItems.length ? focusItems.map((item) => conversationCard(item, true)).join("") : `<div class="queue-empty">Под выбранный KPI-фокус карточек пока нет.</div>`}
+          </div>
+        </section>
+      `;
+    }
+
     function renderConversations() {
       el.mineButton.textContent = state.onlyMine ? "Все владельцы" : "Только мои";
+      [el.riskAllButton, el.riskUrgentButton, el.riskTodayButton, el.riskOverdueButton].forEach((button) => button.classList.remove("primary"));
+      if (state.kpiFocus === "all") el.riskAllButton.classList.add("primary");
+      if (state.kpiFocus === "urgent") el.riskUrgentButton.classList.add("primary");
+      if (state.kpiFocus === "today") el.riskTodayButton.classList.add("primary");
+      if (state.kpiFocus === "overdue") el.riskOverdueButton.classList.add("primary");
       if (!state.conversations.length) {
         el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
+        return;
+      }
+      const filteredItems = state.conversations.filter((item) => matchesKpiFocus(item));
+      if (!filteredItems.length) {
+        el.list.innerHTML = `
+          ${renderRiskBoard(state.conversations)}
+          <div class="empty">Под выбранный KPI-фокус диалогов пока нет.</div>
+        `;
+        el.list.querySelectorAll(".archive-card, .conversation-item").forEach((node) => {
+          node.addEventListener("click", () => openConversation(Number(node.dataset.id)));
+        });
+        el.list.querySelectorAll("[data-risk-focus]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            state.kpiFocus = node.dataset.riskFocus || "all";
+            await applyFilters();
+          });
+        });
         return;
       }
       const grouped = {
@@ -1038,7 +1199,7 @@
         waiting_manager: [],
         closed: [],
       };
-      state.conversations.forEach((item) => {
+      filteredItems.forEach((item) => {
         const status = item.status || "new";
         if (grouped[status]) {
           grouped[status].push(item);
@@ -1050,6 +1211,7 @@
         items.sort((left, right) => slaSnapshot(right).score - slaSnapshot(left).score);
       });
       el.list.innerHTML = `
+        ${renderRiskBoard(state.conversations)}
         ${queueColumn("new", grouped.new)}
         ${queueColumn("in_progress", grouped.in_progress)}
         ${queueColumn("waiting_manager", grouped.waiting_manager)}
@@ -1073,6 +1235,12 @@
         node.addEventListener("click", async (event) => {
           event.stopPropagation();
           await handleQuickAction(node.dataset.action, Number(node.dataset.id));
+        });
+      });
+      el.list.querySelectorAll("[data-risk-focus]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          state.kpiFocus = node.dataset.riskFocus || "all";
+          await applyFilters();
         });
       });
     }
@@ -1442,6 +1610,22 @@
 
     el.mineButton.addEventListener("click", async () => {
       state.onlyMine = !state.onlyMine;
+      await applyFilters();
+    });
+    el.riskAllButton.addEventListener("click", async () => {
+      state.kpiFocus = "all";
+      await applyFilters();
+    });
+    el.riskUrgentButton.addEventListener("click", async () => {
+      state.kpiFocus = "urgent";
+      await applyFilters();
+    });
+    el.riskTodayButton.addEventListener("click", async () => {
+      state.kpiFocus = "today";
+      await applyFilters();
+    });
+    el.riskOverdueButton.addEventListener("click", async () => {
+      state.kpiFocus = "overdue";
       await applyFilters();
     });
     el.claimButton.addEventListener("click", () => postAction("claim", { operator_name: currentOperator() }));
