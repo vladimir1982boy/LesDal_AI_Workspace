@@ -362,6 +362,10 @@
       min-height: 118px;
       margin-top: 10px;
     }
+    .crm-summary {
+      min-height: 110px;
+      margin-top: 10px;
+    }
     .inline-actions {
       display: flex;
       gap: 10px;
@@ -1021,11 +1025,23 @@
       const snapshot = state.detail?.snapshot;
       const events = state.detail?.events || [];
       const replyTemplates = state.detail?.reply_templates || [];
+      const leadStages = [
+        "new",
+        "qualified",
+        "product_selection",
+        "waiting_contacts",
+        "contacted",
+        "payment_pending",
+        "won",
+        "lost",
+        "nurture",
+      ];
       if (!snapshot) {
         el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
         return;
       }
-      const summary = state.detail.summary || "Пока без сводки.";
+      const leadSummary = snapshot.summary || "";
+      const managerSummary = state.detail.summary || "Пока без сводки.";
       el.details.innerHTML = `
         <div class="detail-block">
           <div class="detail-label">Клиент</div>
@@ -1044,16 +1060,23 @@
           <div style="font-size:13px; color:var(--muted);">Needs attention: ${snapshot.needs_attention ? 'yes' : 'no'}</div>
         </div>
         <div class="detail-block">
-          <div class="detail-label">Товары</div>
-          <div>${escapeHtml((snapshot.interested_products || []).join(", ") || "-")}</div>
+          <div class="detail-label">Lead card</div>
+          <div style="font-size:13px; color:var(--muted);">Менеджер может вручную скорректировать стадию, теги и краткую сводку по клиенту.</div>
+          <div class="inline-actions" style="margin-top:12px;">
+            <select id="leadStageInput">
+              ${leadStages.map((stage) => `<option value="${stage}" ${snapshot.stage === stage ? "selected" : ""}>${escapeHtml(stage)}</option>`).join("")}
+            </select>
+          </div>
+          <input id="leadTagsInput" placeholder="Теги через запятую" value="${escapeAttr((snapshot.tags || []).join(", "))}" style="margin-top:10px;" />
+          <textarea id="leadSummaryInput" class="crm-summary" placeholder="Короткая сводка по потребности клиента, контексту и следующему шагу..."></textarea>
+          <div class="inline-actions">
+            <button id="saveLeadProfileButton" class="ghost">Сохранить lead-card</button>
+            <span style="font-size:12px; color:var(--muted);">Текущие товары: ${escapeHtml((snapshot.interested_products || []).join(", ") || "-")}</span>
+          </div>
         </div>
         <div class="detail-block">
-          <div class="detail-label">Теги</div>
-          <div>${escapeHtml((snapshot.tags || []).join(", ") || "-")}</div>
-        </div>
-        <div class="detail-block">
-          <div class="detail-label">Summary</div>
-          <div>${escapeHtml(summary)}</div>
+          <div class="detail-label">Сводка по переписке</div>
+          <div>${escapeHtml(managerSummary)}</div>
         </div>
         <div class="detail-block">
           <div class="detail-label">Заметки менеджера</div>
@@ -1085,6 +1108,25 @@
           </div>
         </div>
       `;
+      const saveLeadProfileButton = document.getElementById("saveLeadProfileButton");
+      const leadStageInput = document.getElementById("leadStageInput");
+      const leadTagsInput = document.getElementById("leadTagsInput");
+      const leadSummaryInput = document.getElementById("leadSummaryInput");
+      if (saveLeadProfileButton && leadStageInput && leadTagsInput && leadSummaryInput) {
+        leadSummaryInput.value = leadSummary;
+        saveLeadProfileButton.addEventListener("click", async () => {
+          const tags = leadTagsInput.value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+          await postAction("profile", {
+            stage: leadStageInput.value,
+            summary: leadSummaryInput.value,
+            tags,
+            operator_name: currentOperator(),
+          });
+        });
+      }
       const saveNotesButton = document.getElementById("saveNotesButton");
       const managerNotesInput = document.getElementById("managerNotesInput");
       if (saveNotesButton && managerNotesInput) {

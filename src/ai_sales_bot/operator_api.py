@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from .app import SalesBotRuntime, create_runtime
-from .domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus
+from .domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadStage
 from .lead_sync import LeadSyncCoordinator
 from .outbound import OutboundDispatcher
 from .services import ConversationOwnershipError
@@ -236,6 +236,25 @@ class OperatorInboxAPI:
         snapshot = self.service.update_manager_notes(
             conversation_id=conversation_id,
             notes=notes,
+            actor=operator_name,
+        )
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(snapshot=snapshot)
+
+    def update_lead_profile(
+        self,
+        conversation_id: int,
+        *,
+        stage: str,
+        summary: str,
+        tags: list[str],
+        operator_name: str = "",
+    ) -> OperatorActionResult:
+        snapshot = self.service.update_lead_profile(
+            conversation_id=conversation_id,
+            stage=LeadStage(stage),
+            summary=summary,
+            tags=tags,
             actor=operator_name,
         )
         self.lead_sync.sync_snapshot(snapshot)

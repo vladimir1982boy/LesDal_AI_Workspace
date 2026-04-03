@@ -79,6 +79,20 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(result.snapshot.manager_notes, "Client prefers evening call")
         self.assertEqual(self.service.last_notes, "Client prefers evening call")
 
+    def test_update_lead_profile_updates_snapshot(self) -> None:
+        result = self.api.update_lead_profile(
+            3,
+            stage=LeadStage.QUALIFIED.value,
+            summary="Client is comparing two options",
+            tags=["warm", "catalog_sent"],
+            operator_name="Alice",
+        )
+
+        self.assertEqual(result.snapshot.stage, LeadStage.QUALIFIED)
+        self.assertEqual(result.snapshot.summary, "Client is comparing two options")
+        self.assertEqual(result.snapshot.tags, ["warm", "catalog_sent"])
+        self.assertEqual(self.service.last_profile["stage"], LeadStage.QUALIFIED)
+
     def test_get_conversation_includes_reply_templates(self) -> None:
         payload = self.api.get_conversation(3)
 
@@ -126,6 +140,7 @@ class _FakeService:
         self.released_by = ""
         self.last_status = snapshot.status
         self.last_notes = snapshot.manager_notes
+        self.last_profile: dict = {}
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -206,6 +221,35 @@ class _FakeService:
     ) -> ConversationSnapshot:
         self.snapshot.manager_notes = notes
         self.last_notes = notes
+        return self.snapshot
+
+    def update_lead_profile(
+        self,
+        *,
+        conversation_id: int,
+        stage: LeadStage | None = None,
+        summary: str | None = None,
+        city: str | None = None,
+        interested_products: list[str] | None = None,
+        tags: list[str] | None = None,
+        manager_notes: str | None = None,
+        actor: str = "",
+        amocrm_lead_id: str | None = None,
+    ) -> ConversationSnapshot:
+        if stage is not None:
+            self.snapshot.stage = stage
+        if summary is not None:
+            self.snapshot.summary = summary
+        if tags is not None:
+            self.snapshot.tags = tags
+        if manager_notes is not None:
+            self.snapshot.manager_notes = manager_notes
+        self.last_profile = {
+            "stage": stage,
+            "summary": summary,
+            "tags": tags,
+            "actor": actor,
+        }
         return self.snapshot
 
     def record_manager_reply(

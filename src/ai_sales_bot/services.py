@@ -142,6 +142,7 @@ class SalesBotService:
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
         manager_notes: str | None = None,
+        actor: str = "",
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
@@ -155,6 +156,28 @@ class SalesBotService:
             manager_notes=manager_notes,
             amocrm_lead_id=amocrm_lead_id,
         )
+        payload: dict[str, object] = {}
+        if stage is not None:
+            payload["stage"] = stage.value
+        if summary is not None:
+            payload["summary"] = summary
+        if tags is not None:
+            payload["tags"] = tags
+        if city is not None:
+            payload["city"] = city
+        if interested_products is not None:
+            payload["interested_products"] = interested_products
+        if manager_notes is not None:
+            payload["manager_notes"] = manager_notes
+        if amocrm_lead_id is not None:
+            payload["amocrm_lead_id"] = amocrm_lead_id
+        if payload:
+            self.repository.add_conversation_event(
+                conversation_id=conversation_id,
+                event_type="lead_profile_updated",
+                actor=actor,
+                payload=payload,
+            )
         return self.repository.get_snapshot(conversation_id)
 
     def update_manager_notes(

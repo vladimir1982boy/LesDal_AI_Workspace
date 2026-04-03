@@ -191,6 +191,36 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         }
                     )
                     return
+
+                if action == "profile":
+                    payload = self._read_json()
+                    stage = str(payload.get("stage") or "").strip()
+                    summary = str(payload.get("summary") or "").strip()
+                    raw_tags = payload.get("tags") or []
+                    operator_name = str(payload.get("operator_name") or "").strip()
+                    if not stage:
+                        self._send_json({"error": "Stage is required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    tags = [
+                        str(item).strip()
+                        for item in raw_tags
+                        if str(item).strip()
+                    ]
+                    result = api.update_lead_profile(
+                        conversation_id,
+                        stage=stage,
+                        summary=summary,
+                        tags=tags,
+                        operator_name=operator_name,
+                    )
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
+                            "outbound_sent": result.outbound_sent,
+                        }
+                    )
+                    return
             except ConversationOwnershipError as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
                 return

@@ -91,6 +91,20 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(snapshot.manager_notes, "Priority client, prefers WhatsApp-style pacing.")
         self.assertEqual(self.repo.events[-1]["event_type"], "manager_notes_updated")
 
+    def test_update_lead_profile_persists_and_logs_event(self) -> None:
+        snapshot = self.service.update_lead_profile(
+            conversation_id=3,
+            stage=LeadStage.QUALIFIED,
+            summary="Interested in medium price tier",
+            tags=["warm", "callback"],
+            actor="Alice",
+        )
+
+        self.assertEqual(snapshot.stage, LeadStage.QUALIFIED)
+        self.assertEqual(snapshot.summary, "Interested in medium price tier")
+        self.assertEqual(snapshot.tags, ["warm", "callback"])
+        self.assertEqual(self.repo.events[-1]["event_type"], "lead_profile_updated")
+
 
 class _FakeRepository:
     def __init__(self, snapshot: ConversationSnapshot) -> None:
@@ -171,6 +185,12 @@ class _FakeRepository:
             self.snapshot.needs_attention = needs_attention
 
     def update_lead(self, **kwargs) -> None:
+        if "stage" in kwargs and kwargs["stage"] is not None:
+            self.snapshot.stage = kwargs["stage"]
+        if "summary" in kwargs and kwargs["summary"] is not None:
+            self.snapshot.summary = kwargs["summary"]
+        if "tags" in kwargs and kwargs["tags"] is not None:
+            self.snapshot.tags = kwargs["tags"]
         if "manager_notes" in kwargs and kwargs["manager_notes"] is not None:
             self.snapshot.manager_notes = kwargs["manager_notes"]
         return None
