@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
+from src.ai_sales_bot.outbound import OutboundSendResult
 from src.ai_sales_bot.services import ConversationOwnershipError, LeadProfileValidationError, SalesBotService
 
 
@@ -111,12 +112,111 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             operator_id="bob",
             text="Reply after stale ownership",
             pause_ai=True,
+            delivery_key="reply-stale-1",
         )
 
         self.assertEqual(snapshot.owner_id, "bob")
         self.assertEqual(snapshot.owner_name, "Bob")
         self.assertEqual(self.repo.events[-2]["event_type"], "lock_expired")
         self.assertEqual(self.repo.events[-1]["event_type"], "manager_reply")
+        self.assertEqual(self.repo.events[-1]["payload"]["delivery_key"], "reply-stale-1")
+
+    def test_record_reply_send_outcome_logs_failure_and_retry_success(self) -> None:
+        self.service.record_reply_send_outcome(
+            conversation_id=3,
+            delivery_key="reply-3-1",
+            actor="Alice",
+            operator_id="alice",
+            outbound_result=OutboundSendResult(
+                ok=False,
+                channel=Channel.VK,
+                error="network timeout",
+                retryable=True,
+            ),
+            retry=False,
+        )
+        self.service.record_reply_send_outcome(
+            conversation_id=3,
+            delivery_key="reply-3-1",
+            actor="Alice",
+            operator_id="alice",
+            outbound_result=OutboundSendResult(
+                ok=True,
+                channel=Channel.VK,
+                message_id="vk-1",
+            ),
+            retry=True,
+        )
+
+        self.assertEqual(self.repo.events[-3]["event_type"], "reply_send_failed")
+        self.assertEqual(self.repo.events[-2]["event_type"], "reply_send_retried")
+        self.assertEqual(self.repo.events[-1]["event_type"], "reply_send_succeeded")
+        self.assertEqual(self.repo.events[-1]["payload"]["message_id"], "vk-1")
+
+    def test_prepare_reply_retry_skips_already_succeeded_delivery(self) -> None:
+        self.repo.events.extend(
+            [
+                {
+                    "conversation_id": 3,
+                    "event_type": "manager_reply",
+                    "actor": "Alice",
+                    "payload": {"text": "Saved reply", "operator_id": "alice", "delivery_key": "reply-3-ok"},
+                },
+                {
+                    "conversation_id": 3,
+                    "event_type": "reply_send_succeeded",
+                    "actor": "Alice",
+                    "payload": {
+                        "delivery_key": "reply-3-ok",
+                        "channel": "vk",
+                        "message_id": "vk-77",
+                        "ok": True,
+                    },
+                },
+            ]
+        )
+
+        retry_context = self.service.prepare_reply_retry(
+            conversation_id=3,
+            delivery_key="reply-3-ok",
+        )
+
+        self.assertTrue(retry_context.already_delivered)
+        self.assertEqual(retry_context.text, "Saved reply")
+        self.assertIsNotNone(retry_context.previous_result)
+        self.assertEqual(retry_context.previous_result.message_id, "vk-77")
+
+    def test_prepare_reply_retry_returns_saved_text_for_failed_delivery(self) -> None:
+        self.repo.events.extend(
+            [
+                {
+                    "conversation_id": 3,
+                    "event_type": "manager_reply",
+                    "actor": "Alice",
+                    "payload": {"text": "Saved reply", "operator_id": "alice", "delivery_key": "reply-3-fail"},
+                },
+                {
+                    "conversation_id": 3,
+                    "event_type": "reply_send_failed",
+                    "actor": "Alice",
+                    "payload": {
+                        "delivery_key": "reply-3-fail",
+                        "channel": "vk",
+                        "error": "network timeout",
+                        "retryable": True,
+                        "ok": False,
+                    },
+                },
+            ]
+        )
+
+        retry_context = self.service.prepare_reply_retry(
+            conversation_id=3,
+            delivery_key="reply-3-fail",
+        )
+
+        self.assertFalse(retry_context.already_delivered)
+        self.assertEqual(retry_context.text, "Saved reply")
 
     def test_release_conversation_clears_owner(self) -> None:
         snapshot = self.service.release_conversation(

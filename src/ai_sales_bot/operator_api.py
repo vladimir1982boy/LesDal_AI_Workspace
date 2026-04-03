@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
@@ -66,6 +67,8 @@ def serialize_outbound_result(result: OutboundSendResult | None) -> dict[str, An
 class OperatorActionResult:
     snapshot: ConversationSnapshot
     outbound_result: OutboundSendResult | None = None
+    reply_delivery_key: str = ""
+    retry_available: bool = False
 
     @property
     def outbound_sent(self) -> bool:
@@ -246,12 +249,14 @@ class OperatorInboxAPI:
         operator_name: str | None = None,
         operator_id: str = "",
     ) -> OperatorActionResult:
+        delivery_key = f"reply-{conversation_id}-{secrets.token_urlsafe(8)}"
         snapshot = self.service.record_manager_reply(
             conversation_id=conversation_id,
             manager_name=operator_name or self.config.manager_name,
             operator_id=operator_id,
             text=text,
             pause_ai=pause_ai,
+            delivery_key=delivery_key,
         )
         target = self.service.get_conversation_target(conversation_id)
         outbound_result = self.dispatcher.send_text(
@@ -260,8 +265,66 @@ class OperatorInboxAPI:
             external_user_id=str(target["external_user_id"]),
             text=text,
         )
+        self.service.record_reply_send_outcome(
+            conversation_id=conversation_id,
+            delivery_key=delivery_key,
+            actor=operator_name or self.config.manager_name,
+            operator_id=operator_id,
+            outbound_result=outbound_result,
+            retry=False,
+        )
         self.lead_sync.sync_snapshot(snapshot)
-        return OperatorActionResult(snapshot=snapshot, outbound_result=outbound_result)
+        return OperatorActionResult(
+            snapshot=snapshot,
+            outbound_result=outbound_result,
+            reply_delivery_key=delivery_key,
+            retry_available=not outbound_result.ok,
+        )
+
+    def retry_reply_delivery(
+        self,
+        conversation_id: int,
+        *,
+        delivery_key: str,
+        operator_name: str | None = None,
+        operator_id: str = "",
+    ) -> OperatorActionResult:
+        retry_context = self.service.prepare_reply_retry(
+            conversation_id=conversation_id,
+            delivery_key=delivery_key,
+        )
+        if retry_context.already_delivered:
+            snapshot = self.service.get_snapshot(conversation_id)
+            self.lead_sync.sync_snapshot(snapshot)
+            return OperatorActionResult(
+                snapshot=snapshot,
+                outbound_result=retry_context.previous_result,
+                reply_delivery_key=delivery_key,
+                retry_available=False,
+            )
+        target = self.service.get_conversation_target(conversation_id)
+        outbound_result = self.dispatcher.send_text(
+            channel=Channel(target["channel"]),
+            external_chat_id=str(target["external_chat_id"]),
+            external_user_id=str(target["external_user_id"]),
+            text=retry_context.text,
+        )
+        self.service.record_reply_send_outcome(
+            conversation_id=conversation_id,
+            delivery_key=delivery_key,
+            actor=operator_name or self.config.manager_name,
+            operator_id=operator_id,
+            outbound_result=outbound_result,
+            retry=True,
+        )
+        snapshot = self.service.get_snapshot(conversation_id)
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(
+            snapshot=snapshot,
+            outbound_result=outbound_result,
+            reply_delivery_key=delivery_key,
+            retry_available=not outbound_result.ok,
+        )
 
     def set_status(
         self,

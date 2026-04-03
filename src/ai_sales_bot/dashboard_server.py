@@ -86,6 +86,10 @@ def _operator_action_payload(api: OperatorInboxAPI, conversation_id: int, result
         "snapshot": api.get_conversation(conversation_id)["snapshot"],
         "outbound_sent": result.outbound_sent,
         "outbound": serialize_outbound_result(result.outbound_result),
+        "retry": {
+            "available": bool(result.retry_available),
+            "delivery_key": str(result.reply_delivery_key or ""),
+        },
     }
 
 
@@ -348,6 +352,21 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         conversation_id,
                         text=text,
                         pause_ai=pause_ai,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
+                    )
+                    self._send_json(_operator_action_payload(api, conversation_id, result))
+                    return
+
+                if action == "retry-reply":
+                    payload = self._read_json()
+                    delivery_key = str(payload.get("delivery_key") or "").strip()
+                    if not delivery_key:
+                        self._send_json({"error": "delivery_key is required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    result = api.retry_reply_delivery(
+                        conversation_id,
+                        delivery_key=delivery_key,
                         operator_name=operator["display_name"],
                         operator_id=operator["operator_id"],
                     )

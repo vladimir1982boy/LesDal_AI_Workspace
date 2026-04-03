@@ -57,6 +57,9 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(self.dispatcher.sent[0]["external_chat_id"], "42")
         self.assertEqual(self.service.recorded_manager_reply["text"], "Manager reply")
         self.assertEqual(self.service.recorded_manager_reply["operator_id"], "alice")
+        self.assertTrue(result.reply_delivery_key.startswith("reply-3-"))
+        self.assertEqual(self.service.last_send_outcome["event"], "reply_send_succeeded")
+        self.assertEqual(self.service.last_send_outcome["delivery_key"], result.reply_delivery_key)
 
     def test_reply_keeps_saved_snapshot_when_outbound_fails(self) -> None:
         self.dispatcher.next_result = OutboundSendResult(
@@ -80,6 +83,47 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertTrue(result.outbound_result.retryable)
         self.assertEqual(self.service.recorded_manager_reply["text"], "Manager reply")
         self.assertEqual(result.snapshot.owner_id, "alice")
+        self.assertTrue(result.retry_available)
+        self.assertEqual(self.service.last_send_outcome["event"], "reply_send_failed")
+
+    def test_retry_reply_delivery_reuses_saved_text_and_logs_retry(self) -> None:
+        result = self.api.retry_reply_delivery(
+            3,
+            delivery_key="reply-3-saved",
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.assertTrue(result.outbound_sent)
+        self.assertEqual(self.dispatcher.sent[0]["text"], "Saved manager reply")
+        self.assertEqual(self.service.last_retry_request["delivery_key"], "reply-3-saved")
+        self.assertEqual(self.service.last_send_outcome["event"], "reply_send_retried")
+        self.assertEqual(self.service.last_send_outcome["delivery_key"], "reply-3-saved")
+
+    def test_retry_reply_delivery_skips_already_delivered_message(self) -> None:
+        self.service.retry_context = {
+            "reply-3-sent": {
+                "text": "Already delivered",
+                "already_delivered": True,
+                "previous_result": OutboundSendResult(
+                    ok=True,
+                    channel=Channel.VK,
+                    message_id="existing-vk-id",
+                ),
+            }
+        }
+
+        result = self.api.retry_reply_delivery(
+            3,
+            delivery_key="reply-3-sent",
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.assertTrue(result.outbound_sent)
+        self.assertEqual(len(self.dispatcher.sent), 0)
+        self.assertFalse(result.retry_available)
+        self.assertEqual(result.outbound_result.message_id, "existing-vk-id")
 
     def test_pause_conversation_switches_mode(self) -> None:
         result = self.api.pause_conversation(3)
@@ -252,6 +296,15 @@ class _FakeService:
         self.last_profile: dict = {}
         self.last_period = ""
         self.last_drilldown: dict = {}
+        self.last_send_outcome: dict = {}
+        self.last_retry_request: dict = {}
+        self.retry_context: dict[str, dict] = {
+            "reply-3-saved": {
+                "text": "Saved manager reply",
+                "already_delivered": False,
+                "previous_result": None,
+            }
+        }
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -454,6 +507,7 @@ class _FakeService:
         operator_id: str = "",
         text: str,
         pause_ai: bool = True,
+        delivery_key: str = "",
     ) -> ConversationSnapshot:
         if pause_ai:
             self.snapshot.mode = ConversationMode.MANAGER
@@ -465,8 +519,48 @@ class _FakeService:
             "operator_id": operator_id,
             "text": text,
             "pause_ai": pause_ai,
+            "delivery_key": delivery_key,
         }
         return self.snapshot
+
+    def record_reply_send_outcome(
+        self,
+        *,
+        conversation_id: int,
+        delivery_key: str,
+        actor: str = "",
+        operator_id: str = "",
+        outbound_result: OutboundSendResult,
+        retry: bool = False,
+    ) -> None:
+        self.last_send_outcome = {
+            "conversation_id": conversation_id,
+            "delivery_key": delivery_key,
+            "actor": actor,
+            "operator_id": operator_id,
+            "retry": retry,
+            "event": "reply_send_succeeded" if outbound_result.ok and not retry else (
+                "reply_send_retried" if retry else "reply_send_failed"
+            ),
+            "outbound_ok": outbound_result.ok,
+        }
+
+    def prepare_reply_retry(
+        self,
+        *,
+        conversation_id: int,
+        delivery_key: str,
+    ):
+        self.last_retry_request = {
+            "conversation_id": conversation_id,
+            "delivery_key": delivery_key,
+        }
+        payload = self.retry_context[delivery_key]
+        return SimpleNamespace(
+            text=payload["text"],
+            already_delivered=payload["already_delivered"],
+            previous_result=payload["previous_result"],
+        )
 
     def resume_ai(self, *, conversation_id: int) -> ConversationSnapshot:
         self.resume_called_with = conversation_id

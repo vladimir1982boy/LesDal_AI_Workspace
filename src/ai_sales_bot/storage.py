@@ -822,7 +822,7 @@ class SQLiteLeadRepository:
         with self._connect() as conn:
             return conn.execute(
                 """
-                SELECT event_type, actor, payload, created_at
+                SELECT id, conversation_id, event_type, actor, payload, created_at
                 FROM conversation_events
                 WHERE conversation_id = ?
                 ORDER BY id DESC

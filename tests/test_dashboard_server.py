@@ -135,6 +135,8 @@ class DashboardServerPayloadTests(unittest.TestCase):
                 error="network timeout",
                 retryable=True,
             ),
+            reply_delivery_key="reply-3-failed",
+            retry_available=True,
         )
 
         payload = _operator_action_payload(api, 3, result)
@@ -150,6 +152,13 @@ class DashboardServerPayloadTests(unittest.TestCase):
                 "error": "network timeout",
                 "retryable": True,
                 "message_id": "",
+            },
+        )
+        self.assertEqual(
+            payload["retry"],
+            {
+                "available": True,
+                "delivery_key": "reply-3-failed",
             },
         )
 

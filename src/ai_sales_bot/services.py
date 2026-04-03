@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Protocol
 import json
+import secrets
 
 from .domain import ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
+from .outbound import OutboundSendResult
 
 
 def _utcnow() -> datetime:
@@ -18,6 +21,13 @@ class ConversationOwnershipError(RuntimeError):
 
 class LeadProfileValidationError(ValueError):
     pass
+
+
+@dataclass(slots=True)
+class ReplyRetryContext:
+    text: str
+    already_delivered: bool = False
+    previous_result: OutboundSendResult | None = None
 
 
 class RepositoryProtocol(Protocol):
@@ -55,6 +65,11 @@ def _coerce_event_payload(raw_payload: object) -> dict:
             return {}
         return decoded if isinstance(decoded, dict) else {}
     return {}
+
+
+def _payload_delivery_key(row: dict) -> str:
+    payload = _coerce_event_payload(row.get("payload"))
+    return str(payload.get("delivery_key") or "").strip()
 
 
 def _resolve_audit_period(period: str, *, now: datetime) -> tuple[str, str, datetime | None]:
@@ -376,11 +391,13 @@ class SalesBotService:
         operator_id: str = "",
         text: str,
         pause_ai: bool = True,
+        delivery_key: str = "",
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
         owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
         ownership_expired = self.ownership_is_expired(snapshot)
+        resolved_delivery_key = delivery_key.strip() or secrets.token_urlsafe(12)
         if pause_ai and owner_id and operator_id and owner_id != operator_id and not ownership_expired:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name or owner_id}"
@@ -415,9 +432,103 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="manager_reply",
             actor=manager_name,
-            payload={"text": text, "pause_ai": pause_ai, "operator_id": operator_id},
+            payload={
+                "text": text,
+                "pause_ai": pause_ai,
+                "operator_id": operator_id,
+                "delivery_key": resolved_delivery_key,
+            },
         )
         return self.repository.get_snapshot(conversation_id)
+
+    def record_reply_send_outcome(
+        self,
+        *,
+        conversation_id: int,
+        delivery_key: str,
+        actor: str = "",
+        operator_id: str = "",
+        outbound_result: OutboundSendResult,
+        retry: bool = False,
+    ) -> None:
+        resolved_delivery_key = str(delivery_key or "").strip()
+        if not resolved_delivery_key:
+            return
+        payload = {
+            "delivery_key": resolved_delivery_key,
+            "operator_id": operator_id,
+            "channel": outbound_result.channel.value,
+            "ok": outbound_result.ok,
+            "error": outbound_result.error,
+            "retryable": outbound_result.retryable,
+            "message_id": outbound_result.message_id,
+            "retry": retry,
+        }
+        if retry:
+            self.repository.add_conversation_event(
+                conversation_id=conversation_id,
+                event_type="reply_send_retried",
+                actor=actor,
+                payload=payload,
+            )
+        self.repository.add_conversation_event(
+            conversation_id=conversation_id,
+            event_type="reply_send_succeeded" if outbound_result.ok else "reply_send_failed",
+            actor=actor,
+            payload=payload,
+        )
+
+    def prepare_reply_retry(
+        self,
+        *,
+        conversation_id: int,
+        delivery_key: str,
+    ) -> ReplyRetryContext:
+        resolved_delivery_key = str(delivery_key or "").strip()
+        if not resolved_delivery_key:
+            raise ValueError("delivery_key is required")
+        events = [
+            dict(row)
+            for row in self.repository.list_conversation_events(conversation_id, limit=200)
+        ]
+        manager_reply_event = next(
+            (
+                row for row in events
+                if str(row.get("event_type") or "") == "manager_reply"
+                and _payload_delivery_key(row) == resolved_delivery_key
+            ),
+            None,
+        )
+        if manager_reply_event is None:
+            raise LookupError(f"Reply delivery {resolved_delivery_key} not found")
+        manager_reply_payload = _coerce_event_payload(manager_reply_event.get("payload"))
+        text = str(manager_reply_payload.get("text") or "")
+        if not text:
+            raise LookupError(f"Reply delivery {resolved_delivery_key} has no text")
+        success_event = next(
+            (
+                row for row in events
+                if str(row.get("event_type") or "") == "reply_send_succeeded"
+                and _payload_delivery_key(row) == resolved_delivery_key
+            ),
+            None,
+        )
+        if success_event is not None:
+            success_payload = _coerce_event_payload(success_event.get("payload"))
+            snapshot = self.repository.get_snapshot(conversation_id)
+            channel_raw = str(success_payload.get("channel") or snapshot.channel.value)
+            return ReplyRetryContext(
+                text=text,
+                already_delivered=True,
+                previous_result=OutboundSendResult(
+                    ok=True,
+                    channel=snapshot.channel if channel_raw == snapshot.channel.value else type(snapshot.channel)(channel_raw),
+                    error="",
+                    retryable=False,
+                    message_id=str(success_payload.get("message_id") or ""),
+                ),
+            )
+        return ReplyRetryContext(text=text)
 
     def resume_ai(self, *, conversation_id: int) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
