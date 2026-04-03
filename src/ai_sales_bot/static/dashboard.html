@@ -199,6 +199,35 @@
       font-size: 13px;
       line-height: 1.4;
     }
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .card-actions button {
+      padding: 8px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .mini-primary { background: var(--accent); color: white; }
+    .mini-warn { background: #d56d49; color: white; }
+    .mini-ghost { background: #f2ece2; color: #5e5348; }
+    .mini-outline {
+      background: white;
+      color: #5e5348;
+      border: 1px solid var(--line);
+    }
+    .card-lock {
+      margin-top: 12px;
+      padding: 9px 11px;
+      border-radius: 12px;
+      background: #f3eef5;
+      color: #66546f;
+      font-size: 12px;
+      font-weight: 600;
+    }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -570,6 +599,39 @@
       return "";
     }
 
+    function cardActions(item, compact = false) {
+      if (compact) {
+        return "";
+      }
+      const operator = currentOperator();
+      const owner = String(item.owner_name || "").trim();
+      const ownedByMe = owner && owner === operator;
+      const ownedByOther = owner && owner !== operator;
+      const actions = [];
+      if (ownedByOther) {
+        return `<div class="card-lock">Закреплено за ${escapeHtml(owner)}</div>`;
+      }
+      if (!ownedByMe && item.status !== "closed") {
+        actions.push(`<button class="mini-primary quick-action" data-id="${item.id}" data-action="claim">Перехватить</button>`);
+      }
+      if (ownedByMe) {
+        actions.push(`<button class="mini-ghost quick-action" data-id="${item.id}" data-action="release">Снять</button>`);
+      }
+      if (item.mode === "manager" && !ownedByOther) {
+        actions.push(`<button class="mini-warn quick-action" data-id="${item.id}" data-action="resume">Вернуть AI</button>`);
+      }
+      if (item.status !== "closed" && !ownedByOther) {
+        actions.push(`<button class="mini-outline quick-action" data-id="${item.id}" data-action="close">Закрыть</button>`);
+      }
+      if (item.status === "closed" && !ownedByOther) {
+        actions.push(`<button class="mini-outline quick-action" data-id="${item.id}" data-action="reopen">Переоткрыть</button>`);
+      }
+      if (!actions.length) {
+        return "";
+      }
+      return `<div class="card-actions">${actions.join("")}</div>`;
+    }
+
     function conversationCard(item, compact = false) {
       const summary = item.summary || "Без summary, менеджер может открыть переписку и взять диалог в работу.";
       const rootClass = compact ? "archive-card" : `conversation-item ${item.id === state.selectedId ? "active" : ""}`;
@@ -590,6 +652,7 @@
             <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || "")}</div>
           </div>
           <div class="item-summary">${escapeHtml(summary)}</div>
+          ${cardActions(item, compact)}
         </article>
       `;
     }
@@ -651,6 +714,12 @@
 
       el.list.querySelectorAll(".conversation-item, .archive-card").forEach((node) => {
         node.addEventListener("click", () => openConversation(Number(node.dataset.id)));
+      });
+      el.list.querySelectorAll(".quick-action").forEach((node) => {
+        node.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await handleQuickAction(node.dataset.action, Number(node.dataset.id));
+        });
       });
     }
 
@@ -787,26 +856,58 @@
       el.status.textContent = `Открыт диалог [conv:${id}].`;
     }
 
-    async function postAction(action, body = {}) {
-      if (!state.selectedId) return;
+    async function postConversationAction(conversationId, action, body = {}) {
       el.status.textContent = "Отправляю действие...";
       try {
-        await apiFetch(`/api/conversations/${state.selectedId}/${action}`, {
+        await apiFetch(`/api/conversations/${conversationId}/${action}`, {
           method: "POST",
           body: JSON.stringify(body),
         });
       } catch (error) {
         if (error.status === 409) {
           el.status.textContent = `Конфликт владельца: ${error.message}`;
-          await openConversation(state.selectedId);
+          if (state.selectedId) {
+            await openConversation(state.selectedId);
+          }
           await refreshConversations();
-          return;
+          return false;
         }
         throw error;
       }
-      await openConversation(state.selectedId);
       await refreshConversations();
+      await openConversation(conversationId);
       el.status.textContent = "Действие выполнено.";
+      return true;
+    }
+
+    async function postAction(action, body = {}) {
+      if (!state.selectedId) return;
+      await postConversationAction(state.selectedId, action, body);
+    }
+
+    async function handleQuickAction(action, conversationId) {
+      if (!conversationId) {
+        return;
+      }
+      if (action === "claim") {
+        await postConversationAction(conversationId, "claim", { operator_name: currentOperator() });
+        return;
+      }
+      if (action === "release") {
+        await postConversationAction(conversationId, "release", { operator_name: currentOperator() });
+        return;
+      }
+      if (action === "resume") {
+        await postConversationAction(conversationId, "resume");
+        return;
+      }
+      if (action === "close") {
+        await postConversationAction(conversationId, "status", { status: "closed", operator_name: currentOperator() });
+        return;
+      }
+      if (action === "reopen") {
+        await postConversationAction(conversationId, "status", { status: "new", operator_name: currentOperator() });
+      }
     }
 
     async function applyFilters() {
