@@ -57,6 +57,7 @@ class SQLiteLeadRepository:
     def _ensure_conversation_columns(self, conn: sqlite3.Connection) -> None:
         existing = self._existing_columns(conn, "conversations")
         required_columns = {
+            "owner_id": "TEXT NOT NULL DEFAULT ''",
             "owner_name": "TEXT NOT NULL DEFAULT ''",
             "owner_claimed_at": "TEXT",
             "last_customer_message_at": "TEXT",
@@ -131,6 +132,7 @@ class SQLiteLeadRepository:
                     external_chat_id TEXT NOT NULL,
                     mode TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'new',
+                    owner_id TEXT NOT NULL DEFAULT '',
                     owner_name TEXT NOT NULL DEFAULT '',
                     owner_claimed_at TEXT,
                     last_customer_message_at TEXT,
@@ -316,10 +318,10 @@ class SQLiteLeadRepository:
             cursor = conn.execute(
                 """
                 INSERT INTO conversations (
-                    contact_id, channel, external_chat_id, mode, status, owner_name,
+                    contact_id, channel, external_chat_id, mode, status, owner_id, owner_name,
                     owner_claimed_at, last_customer_message_at, last_manager_message_at,
                     needs_attention, created_at, updated_at, last_message_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     contact_id,
@@ -327,6 +329,7 @@ class SQLiteLeadRepository:
                     external_chat_id,
                     mode.value,
                     ConversationStatus.NEW.value,
+                    "",
                     "",
                     None,
                     now,
@@ -516,6 +519,7 @@ class SQLiteLeadRepository:
         conversation_id: int,
         mode: ConversationMode | None = None,
         status: ConversationStatus | None = None,
+        owner_id: str | None = None,
         owner_name: str | None = None,
         owner_claimed_at: datetime | None = None,
         clear_owner: bool = False,
@@ -532,10 +536,14 @@ class SQLiteLeadRepository:
             updates.append("status = ?")
             params.append(status.value)
         if clear_owner:
+            updates.append("owner_id = ?")
             updates.append("owner_name = ?")
             updates.append("owner_claimed_at = ?")
-            params.extend(["", None])
+            params.extend(["", "", None])
         else:
+            if owner_id is not None:
+                updates.append("owner_id = ?")
+                params.append(owner_id)
             if owner_name is not None:
                 updates.append("owner_name = ?")
                 params.append(owner_name)
@@ -615,6 +623,7 @@ class SQLiteLeadRepository:
                     l.stage,
                     c.mode,
                     c.status,
+                    c.owner_id,
                     c.owner_name,
                     c.owner_claimed_at,
                     c.last_customer_message_at,
@@ -664,6 +673,7 @@ class SQLiteLeadRepository:
             created_at=datetime.fromisoformat(str(row["created_at"])),
             updated_at=datetime.fromisoformat(str(row["updated_at"])),
             status=_normalize_status(row["status"]),
+            owner_id=str(row["owner_id"] or ""),
             owner_name=str(row["owner_name"] or ""),
             owner_claimed_at=_parse_optional_datetime(row["owner_claimed_at"]),
             last_customer_message_at=_parse_optional_datetime(row["last_customer_message_at"]),
@@ -694,6 +704,7 @@ class SQLiteLeadRepository:
                     c.external_chat_id,
                     c.mode,
                     CASE WHEN c.status = 'open' THEN 'new' ELSE c.status END AS status,
+                    c.owner_id,
                     c.owner_name,
                     c.owner_claimed_at,
                     c.last_customer_message_at,
@@ -727,6 +738,7 @@ class SQLiteLeadRepository:
                     c.external_chat_id,
                     c.mode,
                     CASE WHEN c.status = 'open' THEN 'new' ELSE c.status END AS status,
+                    c.owner_id,
                     ct.external_user_id,
                     ct.display_name,
                     ct.username
@@ -800,6 +812,7 @@ class JSONLeadRepository:
             conversation.setdefault("status", ConversationStatus.NEW.value)
             if conversation["status"] == "open":
                 conversation["status"] = ConversationStatus.NEW.value
+            conversation.setdefault("owner_id", "")
             conversation.setdefault("owner_name", "")
             conversation.setdefault("owner_claimed_at", None)
             conversation.setdefault("last_customer_message_at", None)
@@ -919,6 +932,7 @@ class JSONLeadRepository:
                 "external_chat_id": external_chat_id,
                 "mode": mode.value,
                 "status": ConversationStatus.NEW.value,
+                "owner_id": "",
                 "owner_name": "",
                 "owner_claimed_at": None,
                 "last_customer_message_at": now,
@@ -1085,6 +1099,7 @@ class JSONLeadRepository:
         conversation_id: int,
         mode: ConversationMode | None = None,
         status: ConversationStatus | None = None,
+        owner_id: str | None = None,
         owner_name: str | None = None,
         owner_claimed_at: datetime | None = None,
         clear_owner: bool = False,
@@ -1101,9 +1116,12 @@ class JSONLeadRepository:
             if status is not None:
                 conversation["status"] = status.value
             if clear_owner:
+                conversation["owner_id"] = ""
                 conversation["owner_name"] = ""
                 conversation["owner_claimed_at"] = None
             else:
+                if owner_id is not None:
+                    conversation["owner_id"] = owner_id
                 if owner_name is not None:
                     conversation["owner_name"] = owner_name
                 if owner_claimed_at is not None:
@@ -1188,6 +1206,7 @@ class JSONLeadRepository:
             created_at=datetime.fromisoformat(conversation["created_at"]),
             updated_at=datetime.fromisoformat(conversation["updated_at"]),
             status=_normalize_status(conversation.get("status")),
+            owner_id=str(conversation.get("owner_id", "")),
             owner_name=str(conversation.get("owner_name", "")),
             owner_claimed_at=_parse_optional_datetime(conversation.get("owner_claimed_at")),
             last_customer_message_at=_parse_optional_datetime(conversation.get("last_customer_message_at")),
@@ -1219,6 +1238,7 @@ class JSONLeadRepository:
                     "external_chat_id": conversation["external_chat_id"],
                     "mode": conversation["mode"],
                     "status": _normalize_status(conversation.get("status")).value,
+                    "owner_id": conversation.get("owner_id", ""),
                     "owner_name": conversation.get("owner_name", ""),
                     "owner_claimed_at": conversation.get("owner_claimed_at"),
                     "last_customer_message_at": conversation.get("last_customer_message_at"),
@@ -1257,6 +1277,8 @@ class JSONLeadRepository:
             "external_chat_id": conversation["external_chat_id"],
             "mode": conversation["mode"],
             "status": _normalize_status(conversation.get("status")).value,
+            "owner_id": conversation.get("owner_id", ""),
+            "owner_name": conversation.get("owner_name", ""),
             "external_user_id": contact.get("external_user_id", ""),
             "display_name": contact.get("display_name", ""),
             "username": contact.get("username", ""),

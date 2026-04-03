@@ -149,10 +149,12 @@ class OperatorInboxAPI:
         conversation_id: int,
         *,
         operator_name: str,
+        operator_id: str = "",
     ) -> OperatorActionResult:
         snapshot = self.service.claim_conversation(
             conversation_id=conversation_id,
             operator_name=operator_name,
+            operator_id=operator_id,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)
@@ -179,10 +181,12 @@ class OperatorInboxAPI:
         conversation_id: int,
         *,
         operator_name: str,
+        operator_id: str = "",
     ) -> OperatorActionResult:
         snapshot = self.service.release_conversation(
             conversation_id=conversation_id,
             operator_name=operator_name,
+            operator_id=operator_id,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)
@@ -194,6 +198,7 @@ class OperatorInboxAPI:
         text: str,
         pause_ai: bool = True,
         operator_name: str | None = None,
+        operator_id: str = "",
     ) -> OperatorActionResult:
         target = self.service.get_conversation_target(conversation_id)
         outbound_sent = self.dispatcher.send_text(
@@ -205,6 +210,7 @@ class OperatorInboxAPI:
         snapshot = self.service.record_manager_reply(
             conversation_id=conversation_id,
             manager_name=operator_name or self.config.manager_name,
+            operator_id=operator_id,
             text=text,
             pause_ai=pause_ai,
         )
@@ -217,11 +223,13 @@ class OperatorInboxAPI:
         *,
         status: str,
         operator_name: str = "",
+        operator_id: str = "",
     ) -> OperatorActionResult:
         snapshot = self.service.set_conversation_status(
             conversation_id=conversation_id,
             status=ConversationStatus(status),
             actor=operator_name,
+            actor_id=operator_id,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)
@@ -232,11 +240,13 @@ class OperatorInboxAPI:
         *,
         notes: str,
         operator_name: str = "",
+        operator_id: str = "",
     ) -> OperatorActionResult:
         snapshot = self.service.update_manager_notes(
             conversation_id=conversation_id,
             notes=notes,
             actor=operator_name,
+            actor_id=operator_id,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)
@@ -252,6 +262,7 @@ class OperatorInboxAPI:
         follow_up_date: str,
         next_action: str,
         operator_name: str = "",
+        operator_id: str = "",
     ) -> OperatorActionResult:
         snapshot = self.service.update_lead_profile(
             conversation_id=conversation_id,
@@ -262,6 +273,7 @@ class OperatorInboxAPI:
             follow_up_date=follow_up_date,
             next_action=next_action,
             actor=operator_name,
+            actor_id=operator_id,
         )
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot)

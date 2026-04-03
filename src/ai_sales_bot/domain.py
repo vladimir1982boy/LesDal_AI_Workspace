@@ -98,6 +98,7 @@ class ConversationSnapshot:
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
     status: ConversationStatus = ConversationStatus.NEW
+    owner_id: str = ""
     owner_name: str = ""
     owner_claimed_at: datetime | None = None
     last_customer_message_at: datetime | None = None

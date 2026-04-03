@@ -71,6 +71,22 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
+    .operator-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .operator-pill.offline {
+      color: var(--muted);
+      background: rgba(255,255,255,0.7);
+    }
     .queue-board {
       padding: 14px;
       display: grid;
@@ -523,7 +539,15 @@
         <h1 class="title">LesDal Inbox</h1>
         <p class="subtitle">Единое окно для текущих диалогов из Telegram, VK и MAX</p>
         <div class="filters">
-          <input id="operatorName" placeholder="Оператор" />
+          <div class="filter-grid">
+            <select id="operatorSelect"></select>
+            <input id="operatorPin" type="password" placeholder="PIN оператора" />
+          </div>
+          <div class="filter-grid">
+            <button id="loginButton" class="secondary">Войти как оператор</button>
+            <button id="logoutButton" class="ghost">Выйти</button>
+          </div>
+          <div id="operatorStatusPill" class="operator-pill offline">Оператор не авторизован</div>
           <input id="searchInput" placeholder="Поиск по имени, summary или chat id" />
           <div class="filter-grid">
             <select id="channelFilter">
@@ -613,7 +637,8 @@
 
   <script>
     const authToken = new URLSearchParams(window.location.search).get("token") || "";
-    const operatorStorageKey = "lesdal.operator_name";
+    const operatorSessionStorageKey = "lesdal.operator_session";
+    const operatorChoiceStorageKey = "lesdal.operator_choice";
     const soundStorageKey = "lesdal.alert_sound";
     const browserNotifyStorageKey = "lesdal.browser_notify";
     const dashboardViewStorageKey = "lesdal.dashboard_view";
@@ -624,6 +649,10 @@
       detail: null,
       onlyMine: false,
       kpiFocus: "all",
+      operatorSessionToken: localStorage.getItem(operatorSessionStorageKey) || "",
+      selectedOperatorId: localStorage.getItem(operatorChoiceStorageKey) || "",
+      operator: null,
+      operators: [],
       soundEnabled: localStorage.getItem(soundStorageKey) === "true",
       browserNotifyEnabled: localStorage.getItem(browserNotifyStorageKey) === "true",
       alertingUntil: 0,
@@ -646,7 +675,11 @@
       statusSelect: document.getElementById("statusSelect"),
       statusButton: document.getElementById("statusButton"),
       status: document.getElementById("statusLine"),
-      operatorName: document.getElementById("operatorName"),
+      operatorSelect: document.getElementById("operatorSelect"),
+      operatorPin: document.getElementById("operatorPin"),
+      loginButton: document.getElementById("loginButton"),
+      logoutButton: document.getElementById("logoutButton"),
+      operatorStatusPill: document.getElementById("operatorStatusPill"),
       searchInput: document.getElementById("searchInput"),
       channelFilter: document.getElementById("channelFilter"),
       modeFilter: document.getElementById("modeFilter"),
@@ -662,12 +695,15 @@
       riskOverdueButton: document.getElementById("riskOverdueButton"),
     };
 
-    el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
     loadPersistedView();
     renderAlertToggles();
 
     function authHeaders(extra = {}) {
-      return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
+      const headers = authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : { ...extra };
+      if (state.operatorSessionToken) {
+        headers["X-Operator-Session"] = state.operatorSessionToken;
+      }
+      return headers;
     }
 
     function persistView() {
@@ -711,12 +747,115 @@
     }
 
     function currentOperator() {
-      return (el.operatorName.value || "Vladimir").trim();
+      return state.operator?.display_name || "";
+    }
+
+    function currentOperatorId() {
+      return state.operator?.operator_id || "";
+    }
+
+    function renderOperatorSelect() {
+      const options = state.operators.length
+        ? state.operators.map((item) => `<option value="${escapeAttr(item.operator_id)}">${escapeHtml(item.display_name)}</option>`).join("")
+        : `<option value="">Операторы не настроены</option>`;
+      el.operatorSelect.innerHTML = options;
+      if (state.operator?.operator_id) {
+        el.operatorSelect.value = state.operator.operator_id;
+        return;
+      }
+      if (state.selectedOperatorId && state.operators.some((item) => item.operator_id === state.selectedOperatorId)) {
+        el.operatorSelect.value = state.selectedOperatorId;
+        return;
+      }
+      if (state.operators.length) {
+        el.operatorSelect.value = state.operators[0].operator_id;
+        state.selectedOperatorId = el.operatorSelect.value;
+        localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
+      }
+    }
+
+    function renderAuthState() {
+      renderOperatorSelect();
+      const online = Boolean(state.operator);
+      el.operatorStatusPill.textContent = online
+        ? `Оператор: ${state.operator.display_name}`
+        : "Оператор не авторизован";
+      el.operatorStatusPill.classList.toggle("offline", !online);
+      el.loginButton.disabled = !state.operators.length;
+      el.logoutButton.disabled = !online;
+      el.operatorSelect.disabled = online || !state.operators.length;
+      el.operatorPin.disabled = online;
+    }
+
+    async function loadOperators() {
+      const payload = await apiFetch("/api/auth/operators");
+      state.operators = payload.items || [];
+      renderAuthState();
+    }
+
+    async function restoreOperatorSession() {
+      if (!state.operatorSessionToken) {
+        renderAuthState();
+        return false;
+      }
+      try {
+        const payload = await apiFetch("/api/auth/session");
+        state.operator = payload.operator || null;
+        renderAuthState();
+        return Boolean(state.operator);
+      } catch (error) {
+        state.operatorSessionToken = "";
+        state.operator = null;
+        localStorage.removeItem(operatorSessionStorageKey);
+        renderAuthState();
+        return false;
+      }
+    }
+
+    async function loginOperator() {
+      const operatorId = el.operatorSelect.value;
+      const pin = el.operatorPin.value.trim();
+      if (!operatorId) {
+        el.status.textContent = "Выберите оператора для входа.";
+        el.status.classList.add("alert");
+        return false;
+      }
+      const payload = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          operator_id: operatorId,
+          pin,
+        }),
+      });
+      state.operatorSessionToken = payload.session_token || "";
+      state.operator = payload.operator || null;
+      state.selectedOperatorId = state.operator?.operator_id || operatorId;
+      localStorage.setItem(operatorSessionStorageKey, state.operatorSessionToken);
+      localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
+      el.operatorPin.value = "";
+      renderAuthState();
+      el.status.textContent = `Вошли как ${currentOperator()}.`;
+      el.status.classList.remove("alert");
+      return true;
+    }
+
+    async function logoutOperator() {
+      try {
+        await apiFetch("/api/auth/logout", { method: "POST", body: "{}" });
+      } catch (error) {
+        // no-op: local session will still be cleared
+      }
+      state.operatorSessionToken = "";
+      state.operator = null;
+      localStorage.removeItem(operatorSessionStorageKey);
+      renderAuthState();
+      el.status.textContent = "Операторская сессия завершена.";
+      el.status.classList.remove("alert");
     }
 
     function effectiveOwnerFilter() {
       if (state.onlyMine) {
-        return currentOperator();
+        return currentOperatorId();
       }
       return el.ownerFilter.value.trim();
     }
@@ -744,6 +883,12 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 401 && path !== "/api/auth/login" && path !== "/api/auth/session") {
+          state.operatorSessionToken = "";
+          state.operator = null;
+          localStorage.removeItem(operatorSessionStorageKey);
+          renderAuthState();
+        }
         const error = new Error(payload.error || `HTTP ${response.status}`);
         error.status = response.status;
         throw error;
@@ -1092,13 +1237,14 @@
       if (compact) {
         return "";
       }
-      const operator = currentOperator();
+      const operatorId = currentOperatorId();
+      const ownerId = String(item.owner_id || "").trim();
       const owner = String(item.owner_name || "").trim();
-      const ownedByMe = owner && owner === operator;
-      const ownedByOther = owner && owner !== operator;
+      const ownedByMe = ownerId ? ownerId === operatorId : owner && owner === currentOperator();
+      const ownedByOther = ownerId ? ownerId !== operatorId : owner && owner !== currentOperator();
       const actions = [];
       if (ownedByOther) {
-        return `<div class="card-lock">Закреплено за ${escapeHtml(owner)}</div>`;
+        return `<div class="card-lock">Закреплено за ${escapeHtml(owner || ownerId)}</div>`;
       }
       if (!ownedByMe && item.status !== "closed") {
         actions.push(`<button class="mini-primary quick-action" data-id="${item.id}" data-action="claim">Перехватить</button>`);
@@ -1208,6 +1354,10 @@
     }
 
     function renderConversations() {
+      if (!state.operator) {
+        el.list.innerHTML = `<div class="empty">Авторизуйтесь как оператор, чтобы открыть очереди и карточки.</div>`;
+        return;
+      }
       el.mineButton.textContent = state.onlyMine ? "Все владельцы" : "Только мои";
       [el.riskAllButton, el.riskUrgentButton, el.riskTodayButton, el.riskOverdueButton].forEach((button) => button.classList.remove("primary"));
       if (state.kpiFocus === "all") el.riskAllButton.classList.add("primary");
@@ -1331,7 +1481,7 @@
       ];
       const priorities = ["low", "normal", "high", "urgent"];
       if (!snapshot) {
-        el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
+        el.details.innerHTML = `<div class="empty">${state.operator ? "Карточка лида появится после выбора диалога." : "Сначала войдите как оператор, затем выберите диалог."}</div>`;
         return;
       }
       const leadSummary = snapshot.summary || "";
@@ -1350,7 +1500,7 @@
             ${statusBadge(snapshot.status || 'new')}
             ${stageBadge(snapshot.stage)}
           </div>
-          <div style="font-size:13px; color:var(--muted);">Owner: ${escapeHtml(snapshot.owner_name || "-")}</div>
+          <div style="font-size:13px; color:var(--muted);">Owner: ${escapeHtml(snapshot.owner_name || "-")}${snapshot.owner_id ? ` · ${escapeHtml(snapshot.owner_id)}` : ""}</div>
           <div style="font-size:13px; color:var(--muted);">Needs attention: ${snapshot.needs_attention ? 'yes' : 'no'}</div>
         </div>
         <div class="detail-block">
@@ -1446,7 +1596,6 @@
             priority,
             follow_up_date: followUpDate,
             next_action: nextAction,
-            operator_name: currentOperator(),
           });
         });
       }
@@ -1457,7 +1606,6 @@
         saveNotesButton.addEventListener("click", async () => {
           await postAction("notes", {
             notes: managerNotesInput.value,
-            operator_name: currentOperator(),
           });
         });
       }
@@ -1473,6 +1621,11 @@
     }
 
     function renderHeader() {
+      if (!state.operator) {
+        el.title.textContent = "Войдите как оператор";
+        el.subtitle.textContent = "После авторизации откроются очереди, ownership и история событий.";
+        return;
+      }
       const snapshot = state.detail?.snapshot;
       if (!snapshot) {
         el.title.textContent = "Диалог не выбран";
@@ -1480,15 +1633,28 @@
         return;
       }
       el.title.textContent = `${snapshot.display_name || snapshot.username || `Диалог ${snapshot.conversation_id}`}`;
-      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · mode ${snapshot.mode} · status ${snapshot.status} · owner ${snapshot.owner_name || '-'}`;
+      el.subtitle.textContent = `[conv:${snapshot.conversation_id}] · ${snapshot.channel} · mode ${snapshot.mode} · status ${snapshot.status} · owner ${snapshot.owner_name || snapshot.owner_id || '-'}`;
     }
 
     function renderComposer() {
       const snapshot = state.detail?.snapshot;
-      const enabled = Boolean(snapshot);
+      const enabled = Boolean(snapshot && state.operator);
+      const operatorId = currentOperatorId();
       const operator = currentOperator();
-      const ownedByOther = Boolean(snapshot && snapshot.owner_name && snapshot.owner_name !== operator);
-      const ownedByMe = Boolean(snapshot && snapshot.owner_name === operator);
+      const ownedByOther = Boolean(
+        snapshot && (
+          snapshot.owner_id
+            ? snapshot.owner_id !== operatorId
+            : snapshot.owner_name && snapshot.owner_name !== operator
+        )
+      );
+      const ownedByMe = Boolean(
+        snapshot && (
+          snapshot.owner_id
+            ? snapshot.owner_id === operatorId
+            : snapshot.owner_name === operator
+        )
+      );
       el.replyText.disabled = !enabled || ownedByOther;
       el.replyButton.disabled = !enabled || ownedByOther;
       el.claimButton.disabled = !enabled || ownedByMe;
@@ -1515,6 +1681,12 @@
     }
 
     async function refreshConversations() {
+      if (!state.operator) {
+        state.conversations = [];
+        renderConversations();
+        updateDocumentTitle();
+        return;
+      }
       const previous = state.conversations.slice();
       const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
@@ -1523,6 +1695,9 @@
     }
 
     async function openConversation(id) {
+      if (!state.operator) {
+        return;
+      }
       state.selectedId = id;
       persistView();
       renderConversations();
@@ -1538,6 +1713,11 @@
     }
 
     async function postConversationAction(conversationId, action, body = {}) {
+      if (!state.operator) {
+        el.status.textContent = "Сначала войдите как оператор.";
+        el.status.classList.add("alert");
+        return false;
+      }
       el.status.textContent = "Отправляю действие...";
       el.status.classList.remove("alert");
       try {
@@ -1573,11 +1753,11 @@
         return;
       }
       if (action === "claim") {
-        await postConversationAction(conversationId, "claim", { operator_name: currentOperator() });
+        await postConversationAction(conversationId, "claim");
         return;
       }
       if (action === "release") {
-        await postConversationAction(conversationId, "release", { operator_name: currentOperator() });
+        await postConversationAction(conversationId, "release");
         return;
       }
       if (action === "resume") {
@@ -1585,11 +1765,11 @@
         return;
       }
       if (action === "close") {
-        await postConversationAction(conversationId, "status", { status: "closed", operator_name: currentOperator() });
+        await postConversationAction(conversationId, "status", { status: "closed" });
         return;
       }
       if (action === "reopen") {
-        await postConversationAction(conversationId, "status", { status: "new", operator_name: currentOperator() });
+        await postConversationAction(conversationId, "status", { status: "new" });
       }
     }
 
@@ -1611,11 +1791,48 @@
       }
     }
 
-    el.operatorName.addEventListener("change", async () => {
-      localStorage.setItem(operatorStorageKey, currentOperator());
-      if (state.onlyMine) {
-        await applyFilters();
+    el.operatorSelect.addEventListener("change", () => {
+      state.selectedOperatorId = el.operatorSelect.value;
+      localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
+      el.operatorPin.value = "";
+    });
+    el.operatorPin.addEventListener("keyup", async (event) => {
+      if (event.key !== "Enter") {
+        return;
       }
+      try {
+        const loggedIn = await loginOperator();
+        if (loggedIn) {
+          await applyFilters();
+        }
+      } catch (error) {
+        el.status.textContent = `Ошибка входа: ${error.message}`;
+        el.status.classList.add("alert");
+      }
+    });
+    el.loginButton.addEventListener("click", async () => {
+      try {
+        const loggedIn = await loginOperator();
+        if (loggedIn) {
+          await applyFilters();
+        }
+      } catch (error) {
+        el.status.textContent = `Ошибка входа: ${error.message}`;
+        el.status.classList.add("alert");
+      }
+    });
+    el.logoutButton.addEventListener("click", async () => {
+      await logoutOperator();
+      state.conversations = [];
+      state.detail = null;
+      state.selectedId = null;
+      persistView();
+      renderHeader();
+      renderConversations();
+      renderThread();
+      renderDetails();
+      renderComposer();
+      updateDocumentTitle();
     });
     el.soundToggle.addEventListener("click", async () => {
       state.soundEnabled = !state.soundEnabled;
@@ -1678,24 +1895,37 @@
       persistView();
       await applyFilters();
     });
-    el.claimButton.addEventListener("click", () => postAction("claim", { operator_name: currentOperator() }));
-    el.releaseButton.addEventListener("click", () => postAction("release", { operator_name: currentOperator() }));
+    el.claimButton.addEventListener("click", () => postAction("claim"));
+    el.releaseButton.addEventListener("click", () => postAction("release"));
     el.resumeButton.addEventListener("click", () => postAction("resume"));
-    el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value, operator_name: currentOperator() }));
+    el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value }));
     el.replyButton.addEventListener("click", async () => {
       const text = el.replyText.value.trim();
       if (!text) {
         el.status.textContent = "Введите текст ответа менеджера.";
         return;
       }
-      await postAction("reply", { text, pause_ai: true, operator_name: currentOperator() });
+      await postAction("reply", { text, pause_ai: true });
       el.replyText.value = "";
     });
 
     async function boot() {
       try {
         await ensureAudioContext();
-        await applyFilters();
+        renderAuthState();
+        renderHeader();
+        renderConversations();
+        renderThread();
+        renderDetails();
+        renderComposer();
+        await loadOperators();
+        const restored = await restoreOperatorSession();
+        if (restored) {
+          await applyFilters();
+        } else {
+          el.status.textContent = "Авторизуйтесь как оператор, чтобы открыть inbox.";
+          el.status.classList.remove("alert");
+        }
       } catch (error) {
         el.status.textContent = `Ошибка загрузки: ${error.message}`;
         el.status.classList.add("alert");
@@ -1704,6 +1934,9 @@
 
     setInterval(async () => {
       try {
+        if (!state.operator) {
+          return;
+        }
         await refreshConversations();
         if (state.selectedId) {
           await openConversation(state.selectedId);

@@ -21,6 +21,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         snapshot = self._ingest(repo)
 
         self.assertEqual(snapshot.status.value, "new")
+        self.assertEqual(snapshot.owner_id, "")
         self.assertEqual(snapshot.owner_name, "")
         self.assertIsNone(snapshot.owner_claimed_at)
         self.assertIsNotNone(snapshot.last_customer_message_at)
@@ -36,6 +37,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         snapshot = self._ingest(repo)
 
         self.assertEqual(snapshot.status.value, "new")
+        self.assertEqual(snapshot.owner_id, "")
         self.assertEqual(snapshot.owner_name, "")
         self.assertIsNone(snapshot.owner_claimed_at)
         self.assertIsNotNone(snapshot.last_customer_message_at)
@@ -108,6 +110,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         target = repo.get_conversation_target(snapshot.conversation_id)
 
         self.assertEqual(target["external_user_id"], "user-1")
+        self.assertEqual(target["owner_id"], "")
 
     def test_json_get_conversation_target_includes_external_user_id(self) -> None:
         repo = JSONLeadRepository(self.json_path)
@@ -116,6 +119,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         target = repo.get_conversation_target(snapshot.conversation_id)
 
         self.assertEqual(target["external_user_id"], "user-1")
+        self.assertEqual(target["owner_id"], "")
 
     def test_sqlite_can_store_and_list_conversation_events(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)

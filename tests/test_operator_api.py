@@ -36,12 +36,14 @@ class OperatorInboxAPITests(unittest.TestCase):
             3,
             text="Manager reply",
             pause_ai=True,
+            operator_id="alice",
         )
 
         self.assertTrue(result.outbound_sent)
         self.assertEqual(self.dispatcher.sent[0]["channel"], Channel.VK)
         self.assertEqual(self.dispatcher.sent[0]["external_chat_id"], "42")
         self.assertEqual(self.service.recorded_manager_reply["text"], "Manager reply")
+        self.assertEqual(self.service.recorded_manager_reply["operator_id"], "alice")
 
     def test_pause_conversation_switches_mode(self) -> None:
         result = self.api.pause_conversation(3)
@@ -50,34 +52,41 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(self.service.last_mode, ConversationMode.MANAGER)
 
     def test_claim_conversation_assigns_owner(self) -> None:
-        result = self.api.claim_conversation(3, operator_name="Alice")
+        result = self.api.claim_conversation(3, operator_name="Alice", operator_id="alice")
 
         self.assertEqual(result.snapshot.owner_name, "Alice")
+        self.assertEqual(result.snapshot.owner_id, "alice")
         self.assertEqual(result.snapshot.status, ConversationStatus.IN_PROGRESS)
         self.assertEqual(self.service.claimed_by, "Alice")
+        self.assertEqual(self.service.claimed_by_id, "alice")
 
     def test_release_conversation_clears_owner(self) -> None:
         self.snapshot.mode = ConversationMode.MANAGER
         self.snapshot.status = ConversationStatus.IN_PROGRESS
+        self.snapshot.owner_id = "alice"
         self.snapshot.owner_name = "Alice"
 
-        result = self.api.release_conversation(3, operator_name="Alice")
+        result = self.api.release_conversation(3, operator_name="Alice", operator_id="alice")
 
         self.assertEqual(result.snapshot.owner_name, "")
+        self.assertEqual(result.snapshot.owner_id, "")
         self.assertEqual(result.snapshot.status, ConversationStatus.NEW)
         self.assertEqual(self.service.released_by, "Alice")
+        self.assertEqual(self.service.released_by_id, "alice")
 
     def test_set_status_updates_snapshot(self) -> None:
-        result = self.api.set_status(3, status=ConversationStatus.CLOSED.value, operator_name="Alice")
+        result = self.api.set_status(3, status=ConversationStatus.CLOSED.value, operator_name="Alice", operator_id="alice")
 
         self.assertEqual(result.snapshot.status, ConversationStatus.CLOSED)
         self.assertEqual(self.service.last_status, ConversationStatus.CLOSED)
+        self.assertEqual(self.service.last_actor_id, "alice")
 
     def test_update_manager_notes_updates_snapshot(self) -> None:
-        result = self.api.update_manager_notes(3, notes="Client prefers evening call", operator_name="Alice")
+        result = self.api.update_manager_notes(3, notes="Client prefers evening call", operator_name="Alice", operator_id="alice")
 
         self.assertEqual(result.snapshot.manager_notes, "Client prefers evening call")
         self.assertEqual(self.service.last_notes, "Client prefers evening call")
+        self.assertEqual(self.service.last_actor_id, "alice")
 
     def test_update_lead_profile_updates_snapshot(self) -> None:
         result = self.api.update_lead_profile(
@@ -89,6 +98,7 @@ class OperatorInboxAPITests(unittest.TestCase):
             follow_up_date="2026-04-04",
             next_action="Call after catalog review",
             operator_name="Alice",
+            operator_id="alice",
         )
 
         self.assertEqual(result.snapshot.stage, LeadStage.QUALIFIED)
@@ -98,6 +108,7 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(result.snapshot.follow_up_date, "2026-04-04")
         self.assertEqual(result.snapshot.next_action, "Call after catalog review")
         self.assertEqual(self.service.last_profile["stage"], LeadStage.QUALIFIED)
+        self.assertEqual(self.service.last_profile["actor_id"], "alice")
 
     def test_get_conversation_includes_reply_templates(self) -> None:
         payload = self.api.get_conversation(3)
@@ -143,9 +154,12 @@ class _FakeService:
         self.resume_called_with = 0
         self.last_mode = snapshot.mode
         self.claimed_by = ""
+        self.claimed_by_id = ""
         self.released_by = ""
+        self.released_by_id = ""
         self.last_status = snapshot.status
         self.last_notes = snapshot.manager_notes
+        self.last_actor_id = ""
         self.last_profile: dict = {}
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
@@ -191,19 +205,23 @@ class _FakeService:
         self.last_mode = mode
         return self.snapshot
 
-    def claim_conversation(self, *, conversation_id: int, operator_name: str) -> ConversationSnapshot:
+    def claim_conversation(self, *, conversation_id: int, operator_name: str, operator_id: str = "") -> ConversationSnapshot:
         self.snapshot.mode = ConversationMode.MANAGER
         self.snapshot.status = ConversationStatus.IN_PROGRESS
+        self.snapshot.owner_id = operator_id
         self.snapshot.owner_name = operator_name
         self.claimed_by = operator_name
+        self.claimed_by_id = operator_id
         self.last_mode = ConversationMode.MANAGER
         self.last_status = ConversationStatus.IN_PROGRESS
         return self.snapshot
 
-    def release_conversation(self, *, conversation_id: int, operator_name: str) -> ConversationSnapshot:
+    def release_conversation(self, *, conversation_id: int, operator_name: str, operator_id: str = "") -> ConversationSnapshot:
+        self.snapshot.owner_id = ""
         self.snapshot.owner_name = ""
         self.snapshot.status = ConversationStatus.NEW
         self.released_by = operator_name
+        self.released_by_id = operator_id
         self.last_status = ConversationStatus.NEW
         return self.snapshot
 
@@ -213,9 +231,11 @@ class _FakeService:
         conversation_id: int,
         status: ConversationStatus,
         actor: str = "",
+        actor_id: str = "",
     ) -> ConversationSnapshot:
         self.snapshot.status = status
         self.last_status = status
+        self.last_actor_id = actor_id
         return self.snapshot
 
     def update_manager_notes(
@@ -224,9 +244,11 @@ class _FakeService:
         conversation_id: int,
         notes: str,
         actor: str = "",
+        actor_id: str = "",
     ) -> ConversationSnapshot:
         self.snapshot.manager_notes = notes
         self.last_notes = notes
+        self.last_actor_id = actor_id
         return self.snapshot
 
     def update_lead_profile(
@@ -243,6 +265,7 @@ class _FakeService:
         follow_up_date: str | None = None,
         next_action: str | None = None,
         actor: str = "",
+        actor_id: str = "",
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
         if stage is not None:
@@ -267,6 +290,7 @@ class _FakeService:
             "follow_up_date": follow_up_date,
             "next_action": next_action,
             "actor": actor,
+            "actor_id": actor_id,
         }
         return self.snapshot
 
@@ -275,14 +299,18 @@ class _FakeService:
         *,
         conversation_id: int,
         manager_name: str,
+        operator_id: str = "",
         text: str,
         pause_ai: bool = True,
     ) -> ConversationSnapshot:
         if pause_ai:
             self.snapshot.mode = ConversationMode.MANAGER
+            self.snapshot.owner_id = operator_id
+            self.snapshot.owner_name = manager_name
         self.recorded_manager_reply = {
             "conversation_id": conversation_id,
             "manager_name": manager_name,
+            "operator_id": operator_id,
             "text": text,
             "pause_ai": pause_ai,
         }

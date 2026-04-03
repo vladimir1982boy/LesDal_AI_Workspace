@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -55,6 +55,43 @@ def load_project_env(env_path: str | Path | None = None) -> None:
 
 
 @dataclass(slots=True)
+class DashboardOperator:
+    operator_id: str
+    display_name: str
+    pin: str = ""
+
+
+def _parse_dashboard_operators(raw_value: str, *, fallback_name: str) -> tuple[DashboardOperator, ...]:
+    items: list[DashboardOperator] = []
+    for chunk in raw_value.split(","):
+        raw = chunk.strip()
+        if not raw:
+            continue
+        parts = [part.strip() for part in raw.split("|")]
+        operator_id = parts[0] if len(parts) > 0 else ""
+        display_name = parts[1] if len(parts) > 1 and parts[1] else operator_id
+        pin = parts[2] if len(parts) > 2 else ""
+        if not operator_id:
+            continue
+        items.append(
+            DashboardOperator(
+                operator_id=operator_id,
+                display_name=_repair_utf8_mojibake(display_name or operator_id),
+                pin=pin,
+            )
+        )
+    if items:
+        return tuple(items)
+    return (
+        DashboardOperator(
+            operator_id="manager",
+            display_name=_repair_utf8_mojibake(fallback_name) or "Владимир",
+            pin="",
+        ),
+    )
+
+
+@dataclass(slots=True)
 class SalesBotConfig:
     admin_user_id: int
     admin_chat_id: str
@@ -85,6 +122,7 @@ class SalesBotConfig:
     db_path: Path
     catalog_path: Path
     lead_magnet_path: Path
+    dashboard_operators: tuple[DashboardOperator, ...] = field(default_factory=tuple)
 
     @classmethod
     def from_env(cls, env_path: str | Path | None = None) -> "SalesBotConfig":
@@ -95,10 +133,12 @@ class SalesBotConfig:
         lead_magnet_raw = os.getenv("AI_SALES_LEAD_MAGNET_PATH", "").strip()
         google_creds_path_raw = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH", "").strip()
 
+        manager_name = os.getenv("AI_SALES_MANAGER_NAME", "Владимир").strip() or "Владимир"
+        manager_name = _repair_utf8_mojibake(manager_name) or "Владимир"
         config = cls(
             admin_user_id=int(os.getenv("AI_SALES_ADMIN_ID", "0").strip() or "0"),
             admin_chat_id=os.getenv("AI_SALES_ADMIN_CHAT_ID", "").strip(),
-            manager_name=os.getenv("AI_SALES_MANAGER_NAME", "Владимир").strip() or "Владимир",
+            manager_name=manager_name,
             telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
             telegram_channel_id=os.getenv("TELEGRAM_CHANNEL_ID", "").strip(),
             gemini_api_key=(
@@ -133,11 +173,14 @@ class SalesBotConfig:
             dashboard_host=os.getenv("AI_SALES_DASHBOARD_HOST", "127.0.0.1").strip() or "127.0.0.1",
             dashboard_port=max(1, int(os.getenv("AI_SALES_DASHBOARD_PORT", "8787").strip() or "8787")),
             dashboard_token=os.getenv("AI_SALES_DASHBOARD_TOKEN", "").strip(),
+            dashboard_operators=_parse_dashboard_operators(
+                os.getenv("AI_SALES_DASHBOARD_OPERATORS", "").strip(),
+                fallback_name=manager_name,
+            ),
             db_path=_resolve_path(db_path_raw, default=DEFAULT_DB_PATH),
             catalog_path=_resolve_path(catalog_path_raw, default=DEFAULT_CATALOG_PATH),
             lead_magnet_path=_resolve_path(lead_magnet_raw, default=DEFAULT_LEAD_MAGNET_PATH),
         )
-        config.manager_name = _repair_utf8_mojibake(config.manager_name) or "Владимир"
         return config
 
     @property

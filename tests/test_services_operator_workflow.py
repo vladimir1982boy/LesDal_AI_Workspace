@@ -21,6 +21,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             summary="",
             display_name="Test User",
             username="tester",
+            owner_id="alice",
             owner_name="Alice",
         )
         self.repo = _FakeRepository(self.snapshot)
@@ -41,6 +42,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(self.repo.events[-1]["event_type"], "customer_waiting_manager")
 
     def test_claim_conversation_assigns_owner(self) -> None:
+        self.snapshot.owner_id = ""
         self.snapshot.owner_name = ""
         self.snapshot.mode = ConversationMode.AI
         self.snapshot.status = ConversationStatus.NEW
@@ -48,10 +50,12 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         snapshot = self.service.claim_conversation(
             conversation_id=3,
             operator_name="Bob",
+            operator_id="bob",
         )
 
         self.assertEqual(snapshot.mode, ConversationMode.MANAGER)
         self.assertEqual(snapshot.status, ConversationStatus.IN_PROGRESS)
+        self.assertEqual(snapshot.owner_id, "bob")
         self.assertEqual(snapshot.owner_name, "Bob")
         self.assertEqual(self.repo.events[-1]["event_type"], "claimed_by_manager")
 
@@ -60,6 +64,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             self.service.record_manager_reply(
                 conversation_id=3,
                 manager_name="Bob",
+                operator_id="bob",
                 text="Reply from wrong owner",
                 pause_ai=True,
             )
@@ -68,8 +73,10 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         snapshot = self.service.release_conversation(
             conversation_id=3,
             operator_name="Alice",
+            operator_id="alice",
         )
 
+        self.assertEqual(snapshot.owner_id, "")
         self.assertEqual(snapshot.owner_name, "")
         self.assertEqual(snapshot.status, ConversationStatus.NEW)
         self.assertEqual(self.repo.events[-1]["event_type"], "released_by_manager")
@@ -79,6 +86,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             self.service.release_conversation(
                 conversation_id=3,
                 operator_name="Bob",
+                operator_id="bob",
             )
 
     def test_update_manager_notes_persists_and_logs_event(self) -> None:
@@ -86,10 +94,12 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             conversation_id=3,
             notes="Priority client, prefers WhatsApp-style pacing.",
             actor="Alice",
+            actor_id="alice",
         )
 
         self.assertEqual(snapshot.manager_notes, "Priority client, prefers WhatsApp-style pacing.")
         self.assertEqual(self.repo.events[-1]["event_type"], "manager_notes_updated")
+        self.assertEqual(self.repo.events[-1]["payload"]["operator_id"], "alice")
 
     def test_update_lead_profile_persists_and_logs_event(self) -> None:
         snapshot = self.service.update_lead_profile(
@@ -101,6 +111,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             follow_up_date="2026-04-04",
             next_action="Call after proposal review",
             actor="Alice",
+            actor_id="alice",
         )
 
         self.assertEqual(snapshot.stage, LeadStage.QUALIFIED)
@@ -110,6 +121,7 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(snapshot.follow_up_date, "2026-04-04")
         self.assertEqual(snapshot.next_action, "Call after proposal review")
         self.assertEqual(self.repo.events[-1]["event_type"], "lead_profile_updated")
+        self.assertEqual(self.repo.events[-1]["payload"]["operator_id"], "alice")
 
     def test_update_lead_profile_requires_next_action_for_high_priority(self) -> None:
         with self.assertRaises(LeadProfileValidationError):
@@ -179,6 +191,7 @@ class _FakeRepository:
         conversation_id: int,
         mode: ConversationMode | None = None,
         status: ConversationStatus | None = None,
+        owner_id: str | None = None,
         owner_name: str | None = None,
         owner_claimed_at=None,
         clear_owner: bool = False,
@@ -189,9 +202,12 @@ class _FakeRepository:
         if status is not None:
             self.snapshot.status = status
         if clear_owner:
+            self.snapshot.owner_id = ""
             self.snapshot.owner_name = ""
             self.snapshot.owner_claimed_at = None
         else:
+            if owner_id is not None:
+                self.snapshot.owner_id = owner_id
             if owner_name is not None:
                 self.snapshot.owner_name = owner_name
             if owner_claimed_at is not None:

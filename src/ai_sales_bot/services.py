@@ -27,7 +27,7 @@ class RepositoryProtocol(Protocol):
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]: ...
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]: ...
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None: ...
-    def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
+    def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_id: str | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
     def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, priority: LeadPriority | None = None, follow_up_date: str | None = None, next_action: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]: ...
 
@@ -81,12 +81,18 @@ class SalesBotService:
         *,
         conversation_id: int,
         manager_name: str,
+        operator_id: str = "",
         text: str,
         pause_ai: bool = True,
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
+        owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
-        if pause_ai and owner_name and owner_name != manager_name:
+        if pause_ai and owner_id and operator_id and owner_id != operator_id:
+            raise ConversationOwnershipError(
+                f"Conversation is already owned by {owner_name or owner_id}"
+            )
+        if pause_ai and not owner_id and owner_name and owner_name != manager_name:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
@@ -95,6 +101,7 @@ class SalesBotService:
                 conversation_id=conversation_id,
                 mode=ConversationMode.MANAGER,
                 status=ConversationStatus.IN_PROGRESS,
+                owner_id=operator_id or owner_id or manager_name,
                 owner_name=manager_name,
                 owner_claimed_at=_utcnow(),
                 needs_attention=False,
@@ -109,7 +116,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="manager_reply",
             actor=manager_name,
-            payload={"text": text, "pause_ai": pause_ai},
+            payload={"text": text, "pause_ai": pause_ai, "operator_id": operator_id},
         )
         return self.repository.get_snapshot(conversation_id)
 
@@ -150,6 +157,7 @@ class SalesBotService:
         follow_up_date: str | None = None,
         next_action: str | None = None,
         actor: str = "",
+        actor_id: str = "",
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
         if follow_up_date:
@@ -199,7 +207,7 @@ class SalesBotService:
                 conversation_id=conversation_id,
                 event_type="lead_profile_updated",
                 actor=actor,
-                payload=payload,
+                payload={**payload, "operator_id": actor_id},
             )
         return self.repository.get_snapshot(conversation_id)
 
@@ -209,6 +217,7 @@ class SalesBotService:
         conversation_id: int,
         notes: str,
         actor: str = "",
+        actor_id: str = "",
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
         self.repository.update_lead(
@@ -219,7 +228,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="manager_notes_updated",
             actor=actor,
-            payload={"notes": notes},
+            payload={"notes": notes, "operator_id": actor_id},
         )
         return self.repository.get_snapshot(conversation_id)
 
@@ -240,10 +249,16 @@ class SalesBotService:
         *,
         conversation_id: int,
         operator_name: str,
+        operator_id: str = "",
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
+        existing_owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
-        if owner_name and owner_name != operator_name:
+        if existing_owner_id and operator_id and existing_owner_id != operator_id:
+            raise ConversationOwnershipError(
+                f"Conversation is already owned by {owner_name or existing_owner_id}"
+            )
+        if not existing_owner_id and owner_name and owner_name != operator_name:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
@@ -251,6 +266,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             mode=ConversationMode.MANAGER,
             status=ConversationStatus.IN_PROGRESS,
+            owner_id=operator_id or existing_owner_id or operator_name,
             owner_name=operator_name,
             owner_claimed_at=_utcnow(),
             needs_attention=False,
@@ -259,7 +275,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="claimed_by_manager",
             actor=operator_name,
-            payload={"status": ConversationStatus.IN_PROGRESS.value},
+            payload={"status": ConversationStatus.IN_PROGRESS.value, "operator_id": operator_id},
         )
         return self.repository.get_snapshot(conversation_id)
 
@@ -269,6 +285,7 @@ class SalesBotService:
         conversation_id: int,
         status: ConversationStatus,
         actor: str = "",
+        actor_id: str = "",
     ) -> ConversationSnapshot:
         self.repository.update_conversation_state(
             conversation_id=conversation_id,
@@ -278,7 +295,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="status_changed",
             actor=actor,
-            payload={"status": status.value},
+            payload={"status": status.value, "operator_id": actor_id},
         )
         return self.repository.get_snapshot(conversation_id)
 
@@ -287,10 +304,16 @@ class SalesBotService:
         *,
         conversation_id: int,
         operator_name: str,
+        operator_id: str = "",
     ) -> ConversationSnapshot:
         snapshot = self.repository.get_snapshot(conversation_id)
+        existing_owner_id = snapshot.owner_id.strip()
         owner_name = snapshot.owner_name.strip()
-        if owner_name and owner_name != operator_name:
+        if existing_owner_id and operator_id and existing_owner_id != operator_id:
+            raise ConversationOwnershipError(
+                f"Conversation is already owned by {owner_name or existing_owner_id}"
+            )
+        if not existing_owner_id and owner_name and owner_name != operator_name:
             raise ConversationOwnershipError(
                 f"Conversation is already owned by {owner_name}"
             )
@@ -308,7 +331,7 @@ class SalesBotService:
             conversation_id=conversation_id,
             event_type="released_by_manager",
             actor=operator_name,
-            payload={"status": next_status.value},
+            payload={"status": next_status.value, "operator_id": operator_id},
         )
         return self.repository.get_snapshot(conversation_id)
 
@@ -363,6 +386,7 @@ class SalesBotService:
                 row
                 for row in items
                 if owner_lower in str(row.get("owner_name", "")).lower()
+                or owner_lower in str(row.get("owner_id", "")).lower()
             ]
         if q:
             q_lower = q.lower()

@@ -113,6 +113,25 @@ class SalesBotConfigTests(unittest.TestCase):
 
         self.assertEqual(config.dashboard_host, "127.0.0.1")
         self.assertEqual(config.dashboard_port, 8787)
+        self.assertEqual(len(config.dashboard_operators), 1)
+        self.assertEqual(config.dashboard_operators[0].operator_id, "manager")
+
+    def test_dashboard_operators_parse_from_env(self) -> None:
+        env_path = TEST_RUNTIME_DIR / "config_dashboard_operators.env"
+        env_path.write_text(
+            "AI_SALES_DASHBOARD_OPERATORS=alice|Alice|1234,bob|Bob|5678",
+            encoding="utf-8",
+        )
+
+        with mock.patch.dict("os.environ", {}, clear=True):
+            config = SalesBotConfig.from_env(env_path)
+
+        self.assertEqual(len(config.dashboard_operators), 2)
+        self.assertEqual(config.dashboard_operators[0].operator_id, "alice")
+        self.assertEqual(config.dashboard_operators[0].display_name, "Alice")
+        self.assertEqual(config.dashboard_operators[0].pin, "1234")
+        self.assertEqual(config.dashboard_operators[1].operator_id, "bob")
+        self.assertEqual(config.dashboard_operators[1].pin, "5678")
 
     def test_default_env_files_support_secrets_directory(self) -> None:
         env_path = TEST_RUNTIME_DIR / "config_secrets.env"

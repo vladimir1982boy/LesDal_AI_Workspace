@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import secrets
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +22,12 @@ def _read_dashboard_html() -> bytes:
 
 
 def build_dashboard_handler(api: OperatorInboxAPI):
+    operator_registry = {
+        item.operator_id: item
+        for item in api.config.dashboard_operators
+    }
+    operator_sessions: dict[str, dict[str, str]] = {}
+
     class DashboardHandler(BaseHTTPRequestHandler):
         server_version = "LesDalDashboard/0.1"
 
@@ -35,7 +42,31 @@ def build_dashboard_handler(api: OperatorInboxAPI):
             if parsed.path == "/api/health":
                 self._send_json({"ok": True})
                 return
+            if parsed.path == "/api/auth/operators":
+                self._send_json(
+                    {
+                        "items": [
+                            {
+                                "operator_id": item.operator_id,
+                                "display_name": item.display_name,
+                                "pin_required": bool(item.pin),
+                            }
+                            for item in operator_registry.values()
+                        ]
+                    }
+                )
+                return
+            if parsed.path == "/api/auth/session":
+                operator = self._current_operator()
+                if operator is None:
+                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                self._send_json({"operator": operator})
+                return
             if parsed.path == "/api/conversations":
+                if self._current_operator() is None:
+                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
                 limit = self._query_int(parsed.query, "limit", default=50)
                 self._send_json(
                     {
@@ -52,6 +83,9 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 )
                 return
             if parsed.path.startswith("/api/conversations/"):
+                if self._current_operator() is None:
+                    self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
                 conversation_id, action = self._conversation_route(parsed.path)
                 if conversation_id is None or action is not None:
                     self._send_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
@@ -66,8 +100,44 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 return
 
             parsed = urlparse(self.path)
+            if parsed.path == "/api/auth/login":
+                payload = self._read_json()
+                operator_id = str(payload.get("operator_id") or "").strip()
+                pin = str(payload.get("pin") or "").strip()
+                operator = operator_registry.get(operator_id)
+                if operator is None:
+                    self._send_json({"error": "Unknown operator"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                if operator.pin and operator.pin != pin:
+                    self._send_json({"error": "Invalid PIN"}, status=HTTPStatus.UNAUTHORIZED)
+                    return
+                session_token = secrets.token_urlsafe(24)
+                operator_payload = {
+                    "operator_id": operator.operator_id,
+                    "display_name": operator.display_name,
+                }
+                operator_sessions[session_token] = operator_payload
+                self._send_json(
+                    {
+                        "ok": True,
+                        "session_token": session_token,
+                        "operator": operator_payload,
+                    }
+                )
+                return
+            if parsed.path == "/api/auth/logout":
+                session_token = self.headers.get("X-Operator-Session", "").strip()
+                if session_token:
+                    operator_sessions.pop(session_token, None)
+                self._send_json({"ok": True})
+                return
             if not parsed.path.startswith("/api/conversations/"):
                 self._send_json({"error": "Not found"}, status=HTTPStatus.NOT_FOUND)
+                return
+
+            operator = self._current_operator()
+            if operator is None:
+                self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
                 return
 
             conversation_id, action = self._conversation_route(parsed.path)
@@ -77,7 +147,11 @@ def build_dashboard_handler(api: OperatorInboxAPI):
 
             try:
                 if action == "pause":
-                    result = api.pause_conversation(conversation_id)
+                    result = api.claim_conversation(
+                        conversation_id,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
+                    )
                     self._send_json(
                         {
                             "ok": True,
@@ -88,11 +162,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
 
                 if action == "claim":
-                    payload = self._read_json()
-                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
                     result = api.claim_conversation(
                         conversation_id,
-                        operator_name=operator_name or api.config.manager_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -104,11 +177,10 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
 
                 if action == "release":
-                    payload = self._read_json()
-                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
                     result = api.release_conversation(
                         conversation_id,
-                        operator_name=operator_name or api.config.manager_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -134,7 +206,6 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     payload = self._read_json()
                     text = str(payload.get("text") or "").strip()
                     pause_ai = bool(payload.get("pause_ai", True))
-                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
                     if not text:
                         self._send_json({"error": "Text is required"}, status=HTTPStatus.BAD_REQUEST)
                         return
@@ -142,7 +213,8 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         conversation_id,
                         text=text,
                         pause_ai=pause_ai,
-                        operator_name=operator_name or api.config.manager_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -156,14 +228,14 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 if action == "status":
                     payload = self._read_json()
                     status = str(payload.get("status") or "").strip()
-                    operator_name = str(payload.get("operator_name") or "").strip()
                     if not status:
                         self._send_json({"error": "Status is required"}, status=HTTPStatus.BAD_REQUEST)
                         return
                     result = api.set_status(
                         conversation_id,
                         status=status,
-                        operator_name=operator_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -177,11 +249,11 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 if action == "notes":
                     payload = self._read_json()
                     notes = str(payload.get("notes") or "")
-                    operator_name = str(payload.get("operator_name") or "").strip()
                     result = api.update_manager_notes(
                         conversation_id,
                         notes=notes,
-                        operator_name=operator_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -200,7 +272,6 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     follow_up_date = str(payload.get("follow_up_date") or "").strip()
                     next_action = str(payload.get("next_action") or "").strip()
                     raw_tags = payload.get("tags") or []
-                    operator_name = str(payload.get("operator_name") or "").strip()
                     if not stage:
                         self._send_json({"error": "Stage is required"}, status=HTTPStatus.BAD_REQUEST)
                         return
@@ -220,7 +291,8 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         priority=priority,
                         follow_up_date=follow_up_date,
                         next_action=next_action,
-                        operator_name=operator_name,
+                        operator_name=operator["display_name"],
+                        operator_id=operator["operator_id"],
                     )
                     self._send_json(
                         {
@@ -262,6 +334,12 @@ def build_dashboard_handler(api: OperatorInboxAPI):
 
             self._send_json({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
             return False
+
+        def _current_operator(self) -> dict[str, str] | None:
+            session_token = self.headers.get("X-Operator-Session", "").strip()
+            if not session_token:
+                return None
+            return operator_sessions.get(session_token)
 
         def _send_json(self, payload: dict, *, status: HTTPStatus = HTTPStatus.OK) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
