@@ -32,7 +32,7 @@
     }
     .app {
       display: grid;
-      grid-template-columns: 390px 1fr;
+      grid-template-columns: minmax(560px, 58vw) minmax(0, 1fr);
       min-height: 100vh;
       gap: 18px;
       padding: 18px;
@@ -71,13 +71,100 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
-    .conversation-list {
+    .queue-board {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+      gap: 12px;
+      max-height: calc(100vh - 360px);
+      overflow: auto;
+      align-items: start;
+    }
+    .queue-column {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.74);
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .queue-column.waiting {
+      background: linear-gradient(180deg, rgba(255, 224, 214, 0.88), rgba(255, 250, 242, 0.92));
+      border-color: #e0b39e;
+    }
+    .queue-header {
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.58);
+    }
+    .queue-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .queue-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .queue-count {
+      min-width: 28px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #efe5d7;
+      color: #6f4d2f;
+      text-align: center;
+      font-size: 12px;
+    }
+    .queue-items {
       padding: 10px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: calc(100vh - 360px);
-      overflow: auto;
+    }
+    .queue-empty {
+      padding: 26px 16px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .archive-strip {
+      grid-column: 1 / -1;
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.52);
+    }
+    .archive-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .archive-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .archive-card {
+      min-width: 180px;
+      flex: 1 1 220px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.86);
+      cursor: pointer;
+    }
+    .archive-card.active {
+      border-color: var(--accent);
+      background: #f3fbf6;
     }
     .conversation-item {
       border: 1px solid var(--line);
@@ -274,7 +361,10 @@
     @media (max-width: 1024px) {
       .app { grid-template-columns: 1fr; }
       .content-body { grid-template-columns: 1fr; }
-      .conversation-list { max-height: 320px; }
+      .queue-board {
+        grid-template-columns: 1fr;
+        max-height: 420px;
+      }
       .filter-grid { grid-template-columns: 1fr; }
     }
   </style>
@@ -319,7 +409,7 @@
           </div>
         </div>
       </div>
-      <div id="conversationList" class="conversation-list"></div>
+      <div id="conversationList" class="queue-board"></div>
     </aside>
 
     <main class="panel content">
@@ -466,14 +556,26 @@
       return `<span class="badge owner">${escapeHtml(owner)}</span>`;
     }
 
-    function renderConversations() {
-      el.mineButton.textContent = state.onlyMine ? "Все владельцы" : "Только мои";
-      if (!state.conversations.length) {
-        el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
-        return;
-      }
-      el.list.innerHTML = state.conversations.map((item) => `
-        <article class="conversation-item ${item.id === state.selectedId ? "active" : ""}" data-id="${item.id}">
+    function queueLabel(status) {
+      if (status === "new") return "Новые";
+      if (status === "in_progress") return "В работе";
+      if (status === "waiting_manager") return "Ждут менеджера";
+      return status;
+    }
+
+    function queueNote(status) {
+      if (status === "new") return "Первичный входящий поток, который ещё не закреплён за оператором.";
+      if (status === "in_progress") return "Диалоги уже в работе: у AI или у закреплённого менеджера.";
+      if (status === "waiting_manager") return "Клиент ждёт ответ человека. Это приоритетная очередь.";
+      return "";
+    }
+
+    function conversationCard(item, compact = false) {
+      const summary = item.summary || "Без summary, менеджер может открыть переписку и взять диалог в работу.";
+      const rootClass = compact ? "archive-card" : `conversation-item ${item.id === state.selectedId ? "active" : ""}`;
+      const activeClass = compact && item.id === state.selectedId ? "active" : "";
+      return `
+        <article class="${rootClass}${activeClass ? ` ${activeClass}` : ""}" data-id="${item.id}">
           <div class="item-top">
             <div class="item-name">${escapeHtml(item.display_name || item.username || `Диалог ${item.id}`)}</div>
             <div style="display:flex; gap:8px; align-items:center;">${item.needs_attention ? '<span class="attention-dot"></span>' : ''}${channelBadge(item.channel)}</div>
@@ -481,17 +583,73 @@
           <div class="meta-row" style="margin-top:10px; flex-wrap:wrap;">
             ${stageBadge(item.stage)}
             ${modeBadge(item.mode)}
-            ${statusBadge(item.status || 'new')}
+            ${statusBadge(item.status || "new")}
           </div>
           <div class="owner-row" style="margin-top:10px;">
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${ownerBadge(item.owner_name || '')}</div>
-            <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || '')}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${ownerBadge(item.owner_name || "")}</div>
+            <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || "")}</div>
           </div>
-          <div class="item-summary">${escapeHtml(item.summary || 'Без summary, менеджер может открыть переписку и взять диалог в работу.')}</div>
+          <div class="item-summary">${escapeHtml(summary)}</div>
         </article>
-      `).join("");
+      `;
+    }
 
-      el.list.querySelectorAll(".conversation-item").forEach((node) => {
+    function queueColumn(status, items) {
+      const waitingClass = status === "waiting_manager" ? " waiting" : "";
+      return `
+        <section class="queue-column${waitingClass}">
+          <div class="queue-header">
+            <div class="queue-title">
+              <span>${queueLabel(status)}</span>
+              <span class="queue-count">${items.length}</span>
+            </div>
+            <div class="queue-note">${queueNote(status)}</div>
+          </div>
+          <div class="queue-items">
+            ${items.length ? items.map((item) => conversationCard(item)).join("") : `<div class="queue-empty">В этой очереди пока пусто.</div>`}
+          </div>
+        </section>
+      `;
+    }
+
+    function renderConversations() {
+      el.mineButton.textContent = state.onlyMine ? "Все владельцы" : "Только мои";
+      if (!state.conversations.length) {
+        el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
+        return;
+      }
+      const grouped = {
+        new: [],
+        in_progress: [],
+        waiting_manager: [],
+        closed: [],
+      };
+      state.conversations.forEach((item) => {
+        const status = item.status || "new";
+        if (grouped[status]) {
+          grouped[status].push(item);
+          return;
+        }
+        grouped.new.push(item);
+      });
+      el.list.innerHTML = `
+        ${queueColumn("new", grouped.new)}
+        ${queueColumn("in_progress", grouped.in_progress)}
+        ${queueColumn("waiting_manager", grouped.waiting_manager)}
+        ${grouped.closed.length ? `
+          <section class="archive-strip">
+            <div class="archive-head">
+              <strong>Завершённые</strong>
+              <span class="queue-count">${grouped.closed.length}</span>
+            </div>
+            <div class="archive-list">
+              ${grouped.closed.map((item) => conversationCard(item, true)).join("")}
+            </div>
+          </section>
+        ` : ""}
+      `;
+
+      el.list.querySelectorAll(".conversation-item, .archive-card").forEach((node) => {
         node.addEventListener("click", () => openConversation(Number(node.dataset.id)));
       });
     }
