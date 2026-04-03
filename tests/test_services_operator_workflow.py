@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadStage, SenderRole
-from src.ai_sales_bot.services import ConversationOwnershipError, SalesBotService
+from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
+from src.ai_sales_bot.services import ConversationOwnershipError, LeadProfileValidationError, SalesBotService
 
 
 class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
@@ -97,13 +97,28 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
             stage=LeadStage.QUALIFIED,
             summary="Interested in medium price tier",
             tags=["warm", "callback"],
+            priority=LeadPriority.HIGH,
+            follow_up_date="2026-04-04",
+            next_action="Call after proposal review",
             actor="Alice",
         )
 
         self.assertEqual(snapshot.stage, LeadStage.QUALIFIED)
         self.assertEqual(snapshot.summary, "Interested in medium price tier")
         self.assertEqual(snapshot.tags, ["warm", "callback"])
+        self.assertEqual(snapshot.priority, LeadPriority.HIGH)
+        self.assertEqual(snapshot.follow_up_date, "2026-04-04")
+        self.assertEqual(snapshot.next_action, "Call after proposal review")
         self.assertEqual(self.repo.events[-1]["event_type"], "lead_profile_updated")
+
+    def test_update_lead_profile_requires_next_action_for_high_priority(self) -> None:
+        with self.assertRaises(LeadProfileValidationError):
+            self.service.update_lead_profile(
+                conversation_id=3,
+                priority=LeadPriority.HIGH,
+                next_action="",
+                actor="Alice",
+            )
 
 
 class _FakeRepository:
@@ -193,6 +208,12 @@ class _FakeRepository:
             self.snapshot.tags = kwargs["tags"]
         if "manager_notes" in kwargs and kwargs["manager_notes"] is not None:
             self.snapshot.manager_notes = kwargs["manager_notes"]
+        if "priority" in kwargs and kwargs["priority"] is not None:
+            self.snapshot.priority = kwargs["priority"]
+        if "follow_up_date" in kwargs and kwargs["follow_up_date"] is not None:
+            self.snapshot.follow_up_date = kwargs["follow_up_date"]
+        if "next_action" in kwargs and kwargs["next_action"] is not None:
+            self.snapshot.next_action = kwargs["next_action"]
         return None
 
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]:

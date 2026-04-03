@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Protocol
 
-from .domain import ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadStage, SenderRole
+from .domain import ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
 
 
 def _utcnow() -> datetime:
@@ -11,6 +11,10 @@ def _utcnow() -> datetime:
 
 
 class ConversationOwnershipError(RuntimeError):
+    pass
+
+
+class LeadProfileValidationError(ValueError):
     pass
 
 
@@ -24,7 +28,7 @@ class RepositoryProtocol(Protocol):
     def list_conversation_events(self, conversation_id: int, *, limit: int = 50) -> list[dict]: ...
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> None: ...
     def update_conversation_state(self, *, conversation_id: int, mode: ConversationMode | None = None, status: ConversationStatus | None = None, owner_name: str | None = None, owner_claimed_at: datetime | None = None, clear_owner: bool = False, needs_attention: bool | None = None) -> None: ...
-    def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
+    def update_lead(self, *, lead_id: int, stage: LeadStage | None = None, mode: ConversationMode | None = None, summary: str | None = None, city: str | None = None, interested_products: list[str] | None = None, tags: list[str] | None = None, manager_notes: str | None = None, priority: LeadPriority | None = None, follow_up_date: str | None = None, next_action: str | None = None, amocrm_lead_id: str | None = None) -> None: ...
     def build_transcript(self, conversation_id: int, *, limit: int = 30) -> list[dict]: ...
 
 
@@ -142,9 +146,19 @@ class SalesBotService:
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
         manager_notes: str | None = None,
+        priority: LeadPriority | None = None,
+        follow_up_date: str | None = None,
+        next_action: str | None = None,
         actor: str = "",
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
+        if follow_up_date:
+            try:
+                datetime.fromisoformat(follow_up_date)
+            except ValueError as exc:
+                raise LeadProfileValidationError("follow_up_date must be in YYYY-MM-DD format") from exc
+        if priority in {LeadPriority.HIGH, LeadPriority.URGENT} and not (next_action or "").strip():
+            raise LeadProfileValidationError("next_action is required for high or urgent priority")
         snapshot = self.repository.get_snapshot(conversation_id)
         self.repository.update_lead(
             lead_id=snapshot.lead_id,
@@ -154,6 +168,9 @@ class SalesBotService:
             interested_products=interested_products,
             tags=tags,
             manager_notes=manager_notes,
+            priority=priority,
+            follow_up_date=follow_up_date,
+            next_action=next_action,
             amocrm_lead_id=amocrm_lead_id,
         )
         payload: dict[str, object] = {}
@@ -169,6 +186,12 @@ class SalesBotService:
             payload["interested_products"] = interested_products
         if manager_notes is not None:
             payload["manager_notes"] = manager_notes
+        if priority is not None:
+            payload["priority"] = priority.value
+        if follow_up_date is not None:
+            payload["follow_up_date"] = follow_up_date
+        if next_action is not None:
+            payload["next_action"] = next_action
         if amocrm_lead_id is not None:
             payload["amocrm_lead_id"] = amocrm_lead_id
         if payload:

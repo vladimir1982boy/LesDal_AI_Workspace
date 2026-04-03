@@ -366,6 +366,10 @@
       min-height: 110px;
       margin-top: 10px;
     }
+    .next-action {
+      min-height: 84px;
+      margin-top: 10px;
+    }
     .inline-actions {
       display: flex;
       gap: 10px;
@@ -1036,6 +1040,7 @@
         "lost",
         "nurture",
       ];
+      const priorities = ["low", "normal", "high", "urgent"];
       if (!snapshot) {
         el.details.innerHTML = `<div class="empty">Карточка лида появится после выбора диалога.</div>`;
         return;
@@ -1067,8 +1072,15 @@
               ${leadStages.map((stage) => `<option value="${stage}" ${snapshot.stage === stage ? "selected" : ""}>${escapeHtml(stage)}</option>`).join("")}
             </select>
           </div>
+          <div class="inline-actions" style="margin-top:10px;">
+            <select id="leadPriorityInput">
+              ${priorities.map((priority) => `<option value="${priority}" ${snapshot.priority === priority ? "selected" : ""}>${escapeHtml(priority)}</option>`).join("")}
+            </select>
+            <input id="leadFollowUpInput" type="date" value="${escapeAttr(snapshot.follow_up_date || "")}" />
+          </div>
           <input id="leadTagsInput" placeholder="Теги через запятую" value="${escapeAttr((snapshot.tags || []).join(", "))}" style="margin-top:10px;" />
           <textarea id="leadSummaryInput" class="crm-summary" placeholder="Короткая сводка по потребности клиента, контексту и следующему шагу..."></textarea>
+          <textarea id="leadNextActionInput" class="next-action" placeholder="Следующее действие менеджера: что, когда и кто делает дальше..."></textarea>
           <div class="inline-actions">
             <button id="saveLeadProfileButton" class="ghost">Сохранить lead-card</button>
             <span style="font-size:12px; color:var(--muted);">Текущие товары: ${escapeHtml((snapshot.interested_products || []).join(", ") || "-")}</span>
@@ -1110,11 +1122,30 @@
       `;
       const saveLeadProfileButton = document.getElementById("saveLeadProfileButton");
       const leadStageInput = document.getElementById("leadStageInput");
+      const leadPriorityInput = document.getElementById("leadPriorityInput");
+      const leadFollowUpInput = document.getElementById("leadFollowUpInput");
       const leadTagsInput = document.getElementById("leadTagsInput");
       const leadSummaryInput = document.getElementById("leadSummaryInput");
-      if (saveLeadProfileButton && leadStageInput && leadTagsInput && leadSummaryInput) {
+      const leadNextActionInput = document.getElementById("leadNextActionInput");
+      if (saveLeadProfileButton && leadStageInput && leadPriorityInput && leadFollowUpInput && leadTagsInput && leadSummaryInput && leadNextActionInput) {
         leadSummaryInput.value = leadSummary;
+        leadNextActionInput.value = snapshot.next_action || "";
         saveLeadProfileButton.addEventListener("click", async () => {
+          const priority = leadPriorityInput.value;
+          const followUpDate = leadFollowUpInput.value.trim();
+          const nextAction = leadNextActionInput.value.trim();
+          if ((priority === "high" || priority === "urgent") && !nextAction) {
+            el.status.textContent = "Для high/urgent priority заполните поле next action.";
+            el.status.classList.add("alert");
+            leadNextActionInput.focus();
+            return;
+          }
+          if (followUpDate && !/^\d{4}-\d{2}-\d{2}$/.test(followUpDate)) {
+            el.status.textContent = "Дата follow-up должна быть в формате YYYY-MM-DD.";
+            el.status.classList.add("alert");
+            leadFollowUpInput.focus();
+            return;
+          }
           const tags = leadTagsInput.value
             .split(",")
             .map((item) => item.trim())
@@ -1123,6 +1154,9 @@
             stage: leadStageInput.value,
             summary: leadSummaryInput.value,
             tags,
+            priority,
+            follow_up_date: followUpDate,
+            next_action: nextAction,
             operator_name: currentOperator(),
           });
         });

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadStage
+from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadPriority, LeadStage
 from src.ai_sales_bot.operator_api import OperatorInboxAPI
 
 
@@ -85,12 +85,18 @@ class OperatorInboxAPITests(unittest.TestCase):
             stage=LeadStage.QUALIFIED.value,
             summary="Client is comparing two options",
             tags=["warm", "catalog_sent"],
+            priority=LeadPriority.HIGH.value,
+            follow_up_date="2026-04-04",
+            next_action="Call after catalog review",
             operator_name="Alice",
         )
 
         self.assertEqual(result.snapshot.stage, LeadStage.QUALIFIED)
         self.assertEqual(result.snapshot.summary, "Client is comparing two options")
         self.assertEqual(result.snapshot.tags, ["warm", "catalog_sent"])
+        self.assertEqual(result.snapshot.priority, LeadPriority.HIGH)
+        self.assertEqual(result.snapshot.follow_up_date, "2026-04-04")
+        self.assertEqual(result.snapshot.next_action, "Call after catalog review")
         self.assertEqual(self.service.last_profile["stage"], LeadStage.QUALIFIED)
 
     def test_get_conversation_includes_reply_templates(self) -> None:
@@ -233,6 +239,9 @@ class _FakeService:
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
         manager_notes: str | None = None,
+        priority: LeadPriority | None = None,
+        follow_up_date: str | None = None,
+        next_action: str | None = None,
         actor: str = "",
         amocrm_lead_id: str | None = None,
     ) -> ConversationSnapshot:
@@ -244,10 +253,19 @@ class _FakeService:
             self.snapshot.tags = tags
         if manager_notes is not None:
             self.snapshot.manager_notes = manager_notes
+        if priority is not None:
+            self.snapshot.priority = priority
+        if follow_up_date is not None:
+            self.snapshot.follow_up_date = follow_up_date
+        if next_action is not None:
+            self.snapshot.next_action = next_action
         self.last_profile = {
             "stage": stage,
             "summary": summary,
             "tags": tags,
+            "priority": priority,
+            "follow_up_date": follow_up_date,
+            "next_action": next_action,
             "actor": actor,
         }
         return self.snapshot

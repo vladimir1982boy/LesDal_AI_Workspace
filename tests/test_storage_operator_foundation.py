@@ -27,6 +27,9 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertIsNone(snapshot.last_manager_message_at)
         self.assertFalse(snapshot.needs_attention)
         self.assertEqual(snapshot.manager_notes, "")
+        self.assertEqual(snapshot.priority.value, "normal")
+        self.assertEqual(snapshot.follow_up_date, "")
+        self.assertEqual(snapshot.next_action, "")
 
     def test_json_snapshot_contains_operator_fields(self) -> None:
         repo = JSONLeadRepository(self.json_path)
@@ -39,6 +42,9 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertIsNone(snapshot.last_manager_message_at)
         self.assertFalse(snapshot.needs_attention)
         self.assertEqual(snapshot.manager_notes, "")
+        self.assertEqual(snapshot.priority.value, "normal")
+        self.assertEqual(snapshot.follow_up_date, "")
+        self.assertEqual(snapshot.next_action, "")
 
     def test_sqlite_can_persist_manager_notes(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)
@@ -48,6 +54,7 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         updated = repo.get_snapshot(snapshot.conversation_id)
 
         self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
+        self.assertEqual(updated.priority.value, "normal")
 
     def test_json_can_persist_manager_notes(self) -> None:
         repo = JSONLeadRepository(self.json_path)
@@ -57,6 +64,42 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         updated = repo.get_snapshot(snapshot.conversation_id)
 
         self.assertEqual(updated.manager_notes, "Needs callback after 18:00")
+
+    def test_sqlite_can_persist_kpi_fields(self) -> None:
+        repo = SQLiteLeadRepository(self.sqlite_path)
+        snapshot = self._ingest(repo)
+
+        from src.ai_sales_bot.domain import LeadPriority
+
+        repo.update_lead(
+            lead_id=snapshot.lead_id,
+            priority=LeadPriority.URGENT,
+            follow_up_date="2026-04-04",
+            next_action="Call client after pricing approval",
+        )
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.priority.value, "urgent")
+        self.assertEqual(updated.follow_up_date, "2026-04-04")
+        self.assertEqual(updated.next_action, "Call client after pricing approval")
+
+    def test_json_can_persist_kpi_fields(self) -> None:
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = self._ingest(repo)
+
+        from src.ai_sales_bot.domain import LeadPriority
+
+        repo.update_lead(
+            lead_id=snapshot.lead_id,
+            priority=LeadPriority.HIGH,
+            follow_up_date="2026-04-05",
+            next_action="Send follow-up with offer comparison",
+        )
+        updated = repo.get_snapshot(snapshot.conversation_id)
+
+        self.assertEqual(updated.priority.value, "high")
+        self.assertEqual(updated.follow_up_date, "2026-04-05")
+        self.assertEqual(updated.next_action, "Send follow-up with offer comparison")
 
     def test_sqlite_get_conversation_target_includes_external_user_id(self) -> None:
         repo = SQLiteLeadRepository(self.sqlite_path)

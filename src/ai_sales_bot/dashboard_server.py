@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .app import SalesBotRuntime, create_runtime
 from .operator_api import OperatorInboxAPI
-from .services import ConversationOwnershipError
+from .services import ConversationOwnershipError, LeadProfileValidationError
 
 
 logger = logging.getLogger("lesdal.ai_sales.dashboard")
@@ -196,10 +196,16 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     payload = self._read_json()
                     stage = str(payload.get("stage") or "").strip()
                     summary = str(payload.get("summary") or "").strip()
+                    priority = str(payload.get("priority") or "").strip()
+                    follow_up_date = str(payload.get("follow_up_date") or "").strip()
+                    next_action = str(payload.get("next_action") or "").strip()
                     raw_tags = payload.get("tags") or []
                     operator_name = str(payload.get("operator_name") or "").strip()
                     if not stage:
                         self._send_json({"error": "Stage is required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    if not priority:
+                        self._send_json({"error": "Priority is required"}, status=HTTPStatus.BAD_REQUEST)
                         return
                     tags = [
                         str(item).strip()
@@ -211,6 +217,9 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                         stage=stage,
                         summary=summary,
                         tags=tags,
+                        priority=priority,
+                        follow_up_date=follow_up_date,
+                        next_action=next_action,
                         operator_name=operator_name,
                     )
                     self._send_json(
@@ -223,6 +232,9 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     return
             except ConversationOwnershipError as exc:
                 self._send_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+                return
+            except (LeadProfileValidationError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
             except Exception as exc:
                 logger.exception("Dashboard action failed")

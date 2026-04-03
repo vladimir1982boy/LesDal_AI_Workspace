@@ -6,7 +6,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .domain import Channel, ContactIdentity, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadStage, SenderRole
+from .domain import Channel, ContactIdentity, ConversationMode, ConversationSnapshot, ConversationStatus, InboundMessage, LeadPriority, LeadStage, SenderRole
 
 
 def _utcnow_iso() -> str:
@@ -72,9 +72,17 @@ class SQLiteLeadRepository:
 
     def _ensure_lead_columns(self, conn: sqlite3.Connection) -> None:
         existing = self._existing_columns(conn, "leads")
-        if "manager_notes" not in existing:
+        required_columns = {
+            "manager_notes": "TEXT NOT NULL DEFAULT ''",
+            "priority": "TEXT NOT NULL DEFAULT 'normal'",
+            "follow_up_date": "TEXT NOT NULL DEFAULT ''",
+            "next_action": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column_name, column_sql in required_columns.items():
+            if column_name in existing:
+                continue
             conn.execute(
-                "ALTER TABLE leads ADD COLUMN manager_notes TEXT NOT NULL DEFAULT ''"
+                f"ALTER TABLE leads ADD COLUMN {column_name} {column_sql}"
             )
 
     def _init_schema(self) -> None:
@@ -104,6 +112,9 @@ class SQLiteLeadRepository:
                     city TEXT NOT NULL DEFAULT '',
                     summary TEXT NOT NULL DEFAULT '',
                     manager_notes TEXT NOT NULL DEFAULT '',
+                    priority TEXT NOT NULL DEFAULT 'normal',
+                    follow_up_date TEXT NOT NULL DEFAULT '',
+                    next_action TEXT NOT NULL DEFAULT '',
                     interested_products TEXT NOT NULL DEFAULT '[]',
                     tags TEXT NOT NULL DEFAULT '[]',
                     amocrm_lead_id TEXT NOT NULL DEFAULT '',
@@ -255,14 +266,17 @@ class SQLiteLeadRepository:
             cursor = conn.execute(
                 """
                 INSERT INTO leads (
-                    contact_id, source_channel, stage, mode, manager_notes, created_at, updated_at, last_message_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    contact_id, source_channel, stage, mode, manager_notes, priority, follow_up_date, next_action, created_at, updated_at, last_message_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     contact_id,
                     source_channel.value,
                     stage.value,
                     mode.value,
+                    "",
+                    LeadPriority.NORMAL.value,
+                    "",
                     "",
                     now,
                     now,
@@ -435,6 +449,9 @@ class SQLiteLeadRepository:
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
         manager_notes: str | None = None,
+        priority: LeadPriority | None = None,
+        follow_up_date: str | None = None,
+        next_action: str | None = None,
         amocrm_lead_id: str | None = None,
     ) -> None:
         updates: list[str] = []
@@ -452,6 +469,15 @@ class SQLiteLeadRepository:
         if manager_notes is not None:
             updates.append("manager_notes = ?")
             params.append(manager_notes)
+        if priority is not None:
+            updates.append("priority = ?")
+            params.append(priority.value)
+        if follow_up_date is not None:
+            updates.append("follow_up_date = ?")
+            params.append(follow_up_date)
+        if next_action is not None:
+            updates.append("next_action = ?")
+            params.append(next_action)
         if city is not None:
             updates.append("city = ?")
             params.append(city)
@@ -597,6 +623,9 @@ class SQLiteLeadRepository:
                     l.city,
                     l.summary,
                     l.manager_notes,
+                    l.priority,
+                    l.follow_up_date,
+                    l.next_action,
                     l.tags,
                     l.interested_products,
                     ct.display_name,
@@ -629,6 +658,9 @@ class SQLiteLeadRepository:
             tags=json.loads(row["tags"] or "[]"),
             interested_products=json.loads(row["interested_products"] or "[]"),
             manager_notes=str(row["manager_notes"] or ""),
+            priority=LeadPriority(str(row["priority"] or LeadPriority.NORMAL.value)),
+            follow_up_date=str(row["follow_up_date"] or ""),
+            next_action=str(row["next_action"] or ""),
             created_at=datetime.fromisoformat(str(row["created_at"])),
             updated_at=datetime.fromisoformat(str(row["updated_at"])),
             status=_normalize_status(row["status"]),
@@ -670,6 +702,9 @@ class SQLiteLeadRepository:
                     l.stage,
                     l.summary,
                     l.manager_notes,
+                    l.priority,
+                    l.follow_up_date,
+                    l.next_action,
                     ct.display_name,
                     ct.username,
                     c.last_message_at
@@ -758,6 +793,9 @@ class JSONLeadRepository:
         data.setdefault("conversation_events", [])
         for lead in data.get("leads", []):
             lead.setdefault("manager_notes", "")
+            lead.setdefault("priority", LeadPriority.NORMAL.value)
+            lead.setdefault("follow_up_date", "")
+            lead.setdefault("next_action", "")
         for conversation in data.get("conversations", []):
             conversation.setdefault("status", ConversationStatus.NEW.value)
             if conversation["status"] == "open":
@@ -838,6 +876,9 @@ class JSONLeadRepository:
                 "city": "",
                 "summary": "",
                 "manager_notes": "",
+                "priority": LeadPriority.NORMAL.value,
+                "follow_up_date": "",
+                "next_action": "",
                 "interested_products": [],
                 "tags": [],
                 "amocrm_lead_id": "",
@@ -997,6 +1038,9 @@ class JSONLeadRepository:
         interested_products: list[str] | None = None,
         tags: list[str] | None = None,
         manager_notes: str | None = None,
+        priority: LeadPriority | None = None,
+        follow_up_date: str | None = None,
+        next_action: str | None = None,
         amocrm_lead_id: str | None = None,
     ) -> None:
         data = self._load()
@@ -1011,6 +1055,12 @@ class JSONLeadRepository:
                 lead["summary"] = summary
             if manager_notes is not None:
                 lead["manager_notes"] = manager_notes
+            if priority is not None:
+                lead["priority"] = priority.value
+            if follow_up_date is not None:
+                lead["follow_up_date"] = follow_up_date
+            if next_action is not None:
+                lead["next_action"] = next_action
             if city is not None:
                 lead["city"] = city
             if interested_products is not None:
@@ -1132,6 +1182,9 @@ class JSONLeadRepository:
             tags=list(lead.get("tags", [])),
             interested_products=list(lead.get("interested_products", [])),
             manager_notes=str(lead.get("manager_notes", "")),
+            priority=LeadPriority(str(lead.get("priority", LeadPriority.NORMAL.value))),
+            follow_up_date=str(lead.get("follow_up_date", "")),
+            next_action=str(lead.get("next_action", "")),
             created_at=datetime.fromisoformat(conversation["created_at"]),
             updated_at=datetime.fromisoformat(conversation["updated_at"]),
             status=_normalize_status(conversation.get("status")),
@@ -1174,6 +1227,9 @@ class JSONLeadRepository:
                     "stage": lead.get("stage", LeadStage.NEW.value),
                     "summary": lead.get("summary", ""),
                     "manager_notes": lead.get("manager_notes", ""),
+                    "priority": lead.get("priority", LeadPriority.NORMAL.value),
+                    "follow_up_date": lead.get("follow_up_date", ""),
+                    "next_action": lead.get("next_action", ""),
                     "display_name": contact.get("display_name", ""),
                     "username": contact.get("username", ""),
                     "last_message_at": conversation["last_message_at"],
