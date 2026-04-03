@@ -64,6 +64,23 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
                 pause_ai=True,
             )
 
+    def test_release_conversation_clears_owner(self) -> None:
+        snapshot = self.service.release_conversation(
+            conversation_id=3,
+            operator_name="Alice",
+        )
+
+        self.assertEqual(snapshot.owner_name, "")
+        self.assertEqual(snapshot.status, ConversationStatus.NEW)
+        self.assertEqual(self.repo.events[-1]["event_type"], "released_by_manager")
+
+    def test_release_rejects_foreign_owner(self) -> None:
+        with self.assertRaises(ConversationOwnershipError):
+            self.service.release_conversation(
+                conversation_id=3,
+                operator_name="Bob",
+            )
+
 
 class _FakeRepository:
     def __init__(self, snapshot: ConversationSnapshot) -> None:

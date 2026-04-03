@@ -149,6 +149,19 @@ class OperatorInboxAPI:
         self.lead_sync.sync_snapshot(snapshot)
         return OperatorActionResult(snapshot=snapshot, outbound_sent=outbound_sent)
 
+    def release_conversation(
+        self,
+        conversation_id: int,
+        *,
+        operator_name: str,
+    ) -> OperatorActionResult:
+        snapshot = self.service.release_conversation(
+            conversation_id=conversation_id,
+            operator_name=operator_name,
+        )
+        self.lead_sync.sync_snapshot(snapshot)
+        return OperatorActionResult(snapshot=snapshot)
+
     def reply_to_conversation(
         self,
         conversation_id: int,

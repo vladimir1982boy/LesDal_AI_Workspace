@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, LeadStage
+from src.ai_sales_bot.domain import Channel, ConversationMode, ConversationSnapshot, ConversationStatus, LeadStage
 from src.ai_sales_bot.operator_api import OperatorInboxAPI
 
 
@@ -49,6 +49,30 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(result.snapshot.mode, ConversationMode.MANAGER)
         self.assertEqual(self.service.last_mode, ConversationMode.MANAGER)
 
+    def test_claim_conversation_assigns_owner(self) -> None:
+        result = self.api.claim_conversation(3, operator_name="Alice")
+
+        self.assertEqual(result.snapshot.owner_name, "Alice")
+        self.assertEqual(result.snapshot.status, ConversationStatus.IN_PROGRESS)
+        self.assertEqual(self.service.claimed_by, "Alice")
+
+    def test_release_conversation_clears_owner(self) -> None:
+        self.snapshot.mode = ConversationMode.MANAGER
+        self.snapshot.status = ConversationStatus.IN_PROGRESS
+        self.snapshot.owner_name = "Alice"
+
+        result = self.api.release_conversation(3, operator_name="Alice")
+
+        self.assertEqual(result.snapshot.owner_name, "")
+        self.assertEqual(result.snapshot.status, ConversationStatus.NEW)
+        self.assertEqual(self.service.released_by, "Alice")
+
+    def test_set_status_updates_snapshot(self) -> None:
+        result = self.api.set_status(3, status=ConversationStatus.CLOSED.value, operator_name="Alice")
+
+        self.assertEqual(result.snapshot.status, ConversationStatus.CLOSED)
+        self.assertEqual(self.service.last_status, ConversationStatus.CLOSED)
+
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
 
@@ -86,6 +110,9 @@ class _FakeService:
         self.recorded_manager_reply: dict = {}
         self.resume_called_with = 0
         self.last_mode = snapshot.mode
+        self.claimed_by = ""
+        self.released_by = ""
+        self.last_status = snapshot.status
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -128,6 +155,33 @@ class _FakeService:
     def set_conversation_mode(self, *, conversation_id: int, mode: ConversationMode) -> ConversationSnapshot:
         self.snapshot.mode = mode
         self.last_mode = mode
+        return self.snapshot
+
+    def claim_conversation(self, *, conversation_id: int, operator_name: str) -> ConversationSnapshot:
+        self.snapshot.mode = ConversationMode.MANAGER
+        self.snapshot.status = ConversationStatus.IN_PROGRESS
+        self.snapshot.owner_name = operator_name
+        self.claimed_by = operator_name
+        self.last_mode = ConversationMode.MANAGER
+        self.last_status = ConversationStatus.IN_PROGRESS
+        return self.snapshot
+
+    def release_conversation(self, *, conversation_id: int, operator_name: str) -> ConversationSnapshot:
+        self.snapshot.owner_name = ""
+        self.snapshot.status = ConversationStatus.NEW
+        self.released_by = operator_name
+        self.last_status = ConversationStatus.NEW
+        return self.snapshot
+
+    def set_conversation_status(
+        self,
+        *,
+        conversation_id: int,
+        status: ConversationStatus,
+        actor: str = "",
+    ) -> ConversationSnapshot:
+        self.snapshot.status = status
+        self.last_status = status
         return self.snapshot
 
     def record_manager_reply(

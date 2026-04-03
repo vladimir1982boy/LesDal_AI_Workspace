@@ -76,7 +76,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: calc(100vh - 310px);
+      max-height: calc(100vh - 360px);
       overflow: auto;
     }
     .conversation-item {
@@ -163,7 +163,7 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
-      max-height: calc(100vh - 320px);
+      max-height: calc(100vh - 340px);
       overflow: auto;
     }
     .message {
@@ -187,7 +187,7 @@
       display: flex;
       flex-direction: column;
       gap: 12px;
-      max-height: calc(100vh - 320px);
+      max-height: calc(100vh - 340px);
       overflow: auto;
     }
     .detail-block {
@@ -258,6 +258,7 @@
     button.secondary { background: #eadbc8; color: #5b4534; }
     button.warn { background: #d56d49; color: white; }
     button.ghost { background: #f2ece2; color: #5e5348; }
+    button:disabled { opacity: 0.6; cursor: default; transform: none; }
     .status {
       font-size: 13px;
       color: var(--muted);
@@ -312,6 +313,10 @@
               <option value="false">Без тревоги</option>
             </select>
           </div>
+          <div class="filter-grid">
+            <input id="ownerFilter" placeholder="Фильтр по owner" />
+            <button id="mineButton" class="ghost">Только мои</button>
+          </div>
         </div>
       </div>
       <div id="conversationList" class="conversation-list"></div>
@@ -340,6 +345,7 @@
       <div class="composer">
         <div class="actions">
           <button id="claimButton" class="secondary" disabled>Перехватить</button>
+          <button id="releaseButton" class="ghost" disabled>Снять с себя</button>
           <button id="resumeButton" class="warn" disabled>Вернуть AI</button>
           <button id="replyButton" class="primary" disabled>Отправить ответ</button>
         </div>
@@ -365,6 +371,7 @@
       conversations: [],
       selectedId: null,
       detail: null,
+      onlyMine: false,
     };
 
     const el = {
@@ -376,6 +383,7 @@
       replyText: document.getElementById("replyText"),
       replyButton: document.getElementById("replyButton"),
       claimButton: document.getElementById("claimButton"),
+      releaseButton: document.getElementById("releaseButton"),
       resumeButton: document.getElementById("resumeButton"),
       statusSelect: document.getElementById("statusSelect"),
       statusButton: document.getElementById("statusButton"),
@@ -386,6 +394,8 @@
       modeFilter: document.getElementById("modeFilter"),
       statusFilter: document.getElementById("statusFilter"),
       attentionFilter: document.getElementById("attentionFilter"),
+      ownerFilter: document.getElementById("ownerFilter"),
+      mineButton: document.getElementById("mineButton"),
     };
 
     el.operatorName.value = localStorage.getItem(operatorStorageKey) || "Vladimir";
@@ -398,6 +408,13 @@
       return (el.operatorName.value || "Vladimir").trim();
     }
 
+    function effectiveOwnerFilter() {
+      if (state.onlyMine) {
+        return currentOperator();
+      }
+      return el.ownerFilter.value.trim();
+    }
+
     function filtersQuery() {
       const params = new URLSearchParams();
       params.set("limit", "50");
@@ -406,6 +423,8 @@
       if (el.statusFilter.value) params.set("status", el.statusFilter.value);
       if (el.searchInput.value.trim()) params.set("q", el.searchInput.value.trim());
       if (el.attentionFilter.value) params.set("needs_attention", el.attentionFilter.value);
+      const owner = effectiveOwnerFilter();
+      if (owner) params.set("owner", owner);
       return params.toString();
     }
 
@@ -419,7 +438,9 @@
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || `HTTP ${response.status}`);
+        const error = new Error(payload.error || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
       }
       return payload;
     }
@@ -446,6 +467,7 @@
     }
 
     function renderConversations() {
+      el.mineButton.textContent = state.onlyMine ? "Все владельцы" : "Только мои";
       if (!state.conversations.length) {
         el.list.innerHTML = `<div class="empty">Под выбранные фильтры диалогов пока нет.</div>`;
         return;
@@ -472,6 +494,18 @@
       el.list.querySelectorAll(".conversation-item").forEach((node) => {
         node.addEventListener("click", () => openConversation(Number(node.dataset.id)));
       });
+    }
+
+    function eventPayload(row) {
+      const payload = row.payload;
+      if (!payload) return "";
+      if (typeof payload === "string") {
+        return payload;
+      }
+      if (payload.text) return payload.text;
+      if (payload.status) return `status=${payload.status}`;
+      if (payload.mode) return `mode=${payload.mode}`;
+      return JSON.stringify(payload);
     }
 
     function renderThread() {
@@ -533,6 +567,7 @@
               <div class="event-row">
                 <div><strong>${escapeHtml(row.event_type || 'event')}</strong></div>
                 <div style="color:var(--muted); margin-top:4px;">${escapeHtml(row.actor || '-')} · ${escapeHtml(row.created_at || '')}</div>
+                ${eventPayload(row) ? `<div style="margin-top:6px;">${escapeHtml(eventPayload(row))}</div>` : ''}
               </div>
             `).join("") : '<div style="color:var(--muted);">Событий пока нет.</div>'}
           </div>
@@ -556,9 +591,11 @@
       const enabled = Boolean(snapshot);
       const operator = currentOperator();
       const ownedByOther = Boolean(snapshot && snapshot.owner_name && snapshot.owner_name !== operator);
+      const ownedByMe = Boolean(snapshot && snapshot.owner_name === operator);
       el.replyText.disabled = !enabled || ownedByOther;
       el.replyButton.disabled = !enabled || ownedByOther;
-      el.claimButton.disabled = !enabled || snapshot.mode === "manager" && snapshot.owner_name === operator;
+      el.claimButton.disabled = !enabled || ownedByMe;
+      el.releaseButton.disabled = !enabled || !ownedByMe;
       el.resumeButton.disabled = !enabled || snapshot.mode === "ai";
       el.statusSelect.disabled = !enabled;
       el.statusButton.disabled = !enabled;
@@ -595,10 +632,20 @@
     async function postAction(action, body = {}) {
       if (!state.selectedId) return;
       el.status.textContent = "Отправляю действие...";
-      await apiFetch(`/api/conversations/${state.selectedId}/${action}`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      try {
+        await apiFetch(`/api/conversations/${state.selectedId}/${action}`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } catch (error) {
+        if (error.status === 409) {
+          el.status.textContent = `Конфликт владельца: ${error.message}`;
+          await openConversation(state.selectedId);
+          await refreshConversations();
+          return;
+        }
+        throw error;
+      }
       await openConversation(state.selectedId);
       await refreshConversations();
       el.status.textContent = "Действие выполнено.";
@@ -620,12 +667,15 @@
       }
     }
 
-    el.operatorName.addEventListener("change", () => {
+    el.operatorName.addEventListener("change", async () => {
       localStorage.setItem(operatorStorageKey, currentOperator());
+      if (state.onlyMine) {
+        await applyFilters();
+      }
     });
-    [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter].forEach((node) => {
+    [el.searchInput, el.channelFilter, el.modeFilter, el.statusFilter, el.attentionFilter, el.ownerFilter].forEach((node) => {
       node.addEventListener("change", applyFilters);
-      if (node === el.searchInput) {
+      if (node === el.searchInput || node === el.ownerFilter) {
         node.addEventListener("keyup", async (event) => {
           if (event.key === "Enter") {
             await applyFilters();
@@ -634,7 +684,12 @@
       }
     });
 
+    el.mineButton.addEventListener("click", async () => {
+      state.onlyMine = !state.onlyMine;
+      await applyFilters();
+    });
     el.claimButton.addEventListener("click", () => postAction("claim", { operator_name: currentOperator() }));
+    el.releaseButton.addEventListener("click", () => postAction("release", { operator_name: currentOperator() }));
     el.resumeButton.addEventListener("click", () => postAction("resume"));
     el.statusButton.addEventListener("click", () => postAction("status", { status: el.statusSelect.value, operator_name: currentOperator() }));
     el.replyButton.addEventListener("click", async () => {

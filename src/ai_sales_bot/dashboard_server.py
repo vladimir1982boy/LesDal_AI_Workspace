@@ -103,6 +103,22 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                     )
                     return
 
+                if action == "release":
+                    payload = self._read_json()
+                    operator_name = str(payload.get("operator_name") or api.config.manager_name).strip()
+                    result = api.release_conversation(
+                        conversation_id,
+                        operator_name=operator_name or api.config.manager_name,
+                    )
+                    self._send_json(
+                        {
+                            "ok": True,
+                            "snapshot": api.get_conversation(conversation_id)["snapshot"],
+                            "outbound_sent": result.outbound_sent,
+                        }
+                    )
+                    return
+
                 if action == "resume":
                     result = api.resume_conversation(conversation_id)
                     self._send_json(

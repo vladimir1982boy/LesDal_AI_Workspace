@@ -214,6 +214,36 @@ class SalesBotService:
         )
         return self.repository.get_snapshot(conversation_id)
 
+    def release_conversation(
+        self,
+        *,
+        conversation_id: int,
+        operator_name: str,
+    ) -> ConversationSnapshot:
+        snapshot = self.repository.get_snapshot(conversation_id)
+        owner_name = snapshot.owner_name.strip()
+        if owner_name and owner_name != operator_name:
+            raise ConversationOwnershipError(
+                f"Conversation is already owned by {owner_name}"
+            )
+        next_status = (
+            ConversationStatus.WAITING_MANAGER
+            if snapshot.needs_attention
+            else ConversationStatus.NEW
+        )
+        self.repository.update_conversation_state(
+            conversation_id=conversation_id,
+            status=next_status,
+            clear_owner=True,
+        )
+        self.repository.add_conversation_event(
+            conversation_id=conversation_id,
+            event_type="released_by_manager",
+            actor=operator_name,
+            payload={"status": next_status.value},
+        )
+        return self.repository.get_snapshot(conversation_id)
+
     def build_manager_summary(self, *, conversation_id: int, limit: int = 12) -> str:
         snapshot = self.repository.get_snapshot(conversation_id)
         transcript = self.repository.build_transcript(conversation_id, limit=limit)
