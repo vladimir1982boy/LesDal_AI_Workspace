@@ -691,6 +691,7 @@
       detail: null,
       onlyMine: false,
       kpiFocus: "all",
+      auditPeriod: "30d",
       operatorSessionToken: localStorage.getItem(operatorSessionStorageKey) || "",
       selectedOperatorId: localStorage.getItem(operatorChoiceStorageKey) || "",
       operator: null,
@@ -761,6 +762,7 @@
         owner: el.ownerFilter.value || "",
         onlyMine: state.onlyMine,
         kpiFocus: state.kpiFocus,
+        auditPeriod: state.auditPeriod,
         selectedId: state.selectedId,
       };
       localStorage.setItem(dashboardViewStorageKey, JSON.stringify(payload));
@@ -784,6 +786,9 @@
         state.kpiFocus = ["all", "urgent", "today", "overdue"].includes(String(saved.kpiFocus))
           ? String(saved.kpiFocus)
           : "all";
+        state.auditPeriod = ["today", "7d", "30d"].includes(String(saved.auditPeriod))
+          ? String(saved.auditPeriod)
+          : "30d";
         state.selectedId = Number.isFinite(Number(saved.selectedId)) && Number(saved.selectedId) > 0
           ? Number(saved.selectedId)
           : null;
@@ -1466,51 +1471,31 @@
       const speed = summary.resolution_speed || {};
       const waitingByOperator = speed.waiting_to_first_reply_by_operator || [];
       const forcedByOperator = speed.forced_to_resolution_by_operator || [];
+      const currentPeriod = summary.period || state.auditPeriod || "30d";
       return `
         <section class="audit-board">
           <div class="queue-title">
             <span>Supervisor Audit</span>
             <span class="queue-count">${summary.total_count || 0}</span>
           </div>
-          <div class="risk-note">Агрегированная сводка по принудительным takeover-событиям, чтобы supervisor видел не только отдельные кейсы, но и общий паттерн за день и неделю.</div>
+          <div class="risk-note">Агрегированная сводка по forced takeover и скорости разруливания. Временное окно влияет на event-метрики и breakdown по операторам, а ownership quality ниже остаётся текущим срезом очереди.</div>
+          <div class="risk-toolbar">
+            <button class="risk-chip ${currentPeriod === "today" ? "active" : ""}" data-audit-period="today">today</button>
+            <button class="risk-chip ${currentPeriod === "7d" ? "active" : ""}" data-audit-period="7d">7d</button>
+            <button class="risk-chip ${currentPeriod === "30d" ? "active" : ""}" data-audit-period="30d">30d</button>
+          </div>
           <div class="audit-grid">
             <div class="audit-metric">
-              <div style="color:var(--muted);">Forced today</div>
-              <strong>${summary.today_count || 0}</strong>
+              <div style="color:var(--muted);">Окно</div>
+              <strong>${escapeHtml(summary.period_label || "30 дней")}</strong>
             </div>
             <div class="audit-metric">
-              <div style="color:var(--muted);">Forced this week</div>
-              <strong>${summary.week_count || 0}</strong>
-            </div>
-            <div class="audit-metric">
-              <div style="color:var(--muted);">Всего в ленте</div>
+              <div style="color:var(--muted);">Forced в окне</div>
               <strong>${summary.total_count || 0}</strong>
             </div>
-          </div>
-          <div class="audit-grid">
             <div class="audit-metric">
-              <div style="color:var(--muted);">Ждут менеджера</div>
-              <strong>${quality.waiting_manager_count || 0}</strong>
-            </div>
-            <div class="audit-metric">
-              <div style="color:var(--muted);">У менеджера без ответа</div>
-              <strong>${quality.manager_without_reply_count || 0}</strong>
-            </div>
-            <div class="audit-metric">
-              <div style="color:var(--muted);">Forced → закрыто</div>
-              <strong>${quality.forced_closed_count || 0}</strong>
-            </div>
-          </div>
-          <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
-            <div class="audit-metric">
-              <div style="color:var(--muted);">Forced → возврат AI</div>
-              <strong>${quality.forced_returned_ai_count || 0}</strong>
-            </div>
-            <div class="audit-metric">
-              <div style="color:var(--muted);">Ownership Quality</div>
-              <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
-                Видно, сколько кейсов застряло в человеческом ownership и чем заканчиваются forced takeover-сценарии.
-              </div>
+              <div style="color:var(--muted);">Forced сегодня / 7д</div>
+              <strong>${summary.today_count || 0} / ${summary.week_count || 0}</strong>
             </div>
           </div>
           <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
@@ -1557,6 +1542,32 @@
               </div>
             </div>
           </div>
+          <div class="audit-grid">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Ждут менеджера</div>
+              <strong>${quality.waiting_manager_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">У менеджера без ответа</div>
+              <strong>${quality.manager_without_reply_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced → закрыто</div>
+              <strong>${quality.forced_closed_count || 0}</strong>
+            </div>
+          </div>
+          <div class="audit-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Forced → возврат AI</div>
+              <strong>${quality.forced_returned_ai_count || 0}</strong>
+            </div>
+            <div class="audit-metric">
+              <div style="color:var(--muted);">Ownership Quality</div>
+              <div style="margin-top:8px; font-size:13px; color:var(--muted); line-height:1.45;">
+                Видно, сколько кейсов застряло в человеческом ownership и чем заканчиваются forced takeover-сценарии.
+              </div>
+            </div>
+          </div>
           <div class="audit-grid" style="grid-template-columns: 1.2fr 1fr;">
             <div class="audit-metric">
               <div style="color:var(--muted);">By operator</div>
@@ -1600,6 +1611,13 @@
           ${renderAuditBoard()}
           <div class="empty">Под выбранные фильтры диалогов пока нет.</div>
         `;
+        el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            state.auditPeriod = node.dataset.auditPeriod || "30d";
+            persistView();
+            await applyFilters();
+          });
+        });
         return;
       }
       const filteredItems = state.conversations.filter((item) => matchesKpiFocus(item));
@@ -1615,6 +1633,13 @@
         el.list.querySelectorAll("[data-risk-focus]").forEach((node) => {
           node.addEventListener("click", async () => {
             state.kpiFocus = node.dataset.riskFocus || "all";
+            await applyFilters();
+          });
+        });
+        el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
+          node.addEventListener("click", async () => {
+            state.auditPeriod = node.dataset.auditPeriod || "30d";
+            persistView();
             await applyFilters();
           });
         });
@@ -1668,6 +1693,13 @@
       el.list.querySelectorAll("[data-risk-focus]").forEach((node) => {
         node.addEventListener("click", async () => {
           state.kpiFocus = node.dataset.riskFocus || "all";
+          await applyFilters();
+        });
+      });
+      el.list.querySelectorAll("[data-audit-period]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          state.auditPeriod = node.dataset.auditPeriod || "30d";
+          persistView();
           await applyFilters();
         });
       });
@@ -1933,7 +1965,7 @@
         return;
       }
       const previous = state.conversations.slice();
-      state.auditSummary = await apiFetch("/api/audit/forced-takeovers");
+      state.auditSummary = await apiFetch(`/api/audit/forced-takeovers?period=${encodeURIComponent(state.auditPeriod || "30d")}`);
       const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
       state.conversations = payload.items || [];
       await handleQueueAlerts(previous, state.conversations);

@@ -131,8 +131,8 @@ class OperatorInboxAPI:
             "reply_templates": [dict(item) for item in DEFAULT_REPLY_TEMPLATES],
         }
 
-    def get_forced_takeover_summary(self) -> dict[str, Any]:
-        summary = self.service.get_forced_takeover_summary(limit=200)
+    def get_forced_takeover_summary(self, *, period: str = "30d") -> dict[str, Any]:
+        summary = self.service.get_forced_takeover_summary(limit=200, period=period)
         return {
             key: _serialize_value(value)
             for key, value in summary.items()

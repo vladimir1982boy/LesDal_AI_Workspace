@@ -125,13 +125,14 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertIn("title", payload["reply_templates"][0])
 
     def test_get_forced_takeover_summary_proxies_service_summary(self) -> None:
-        payload = self.api.get_forced_takeover_summary()
+        payload = self.api.get_forced_takeover_summary(period="7d")
 
         self.assertEqual(payload["today_count"], 1)
         self.assertEqual(payload["by_operator"][0]["operator"], "Lead")
         self.assertEqual(payload["ownership_quality"]["waiting_manager_count"], 2)
         self.assertEqual(payload["resolution_speed"]["waiting_to_first_reply_median_minutes"], 18)
         self.assertEqual(payload["resolution_speed"]["waiting_to_first_reply_by_operator"][0]["operator"], "Alice")
+        self.assertEqual(self.service.last_period, "7d")
 
     def test_resume_conversation_notifies_customer(self) -> None:
         result = self.api.resume_conversation(3, notify_customer=True)
@@ -178,6 +179,7 @@ class _FakeService:
         self.last_notes = snapshot.manager_notes
         self.last_actor_id = ""
         self.last_profile: dict = {}
+        self.last_period = ""
 
     def list_recent_conversations(self, *, limit: int = 20) -> list[dict]:
         return [
@@ -203,8 +205,11 @@ class _FakeService:
     def get_conversation_events(self, *, conversation_id: int, limit: int = 50) -> list[dict]:
         return []
 
-    def get_forced_takeover_summary(self, *, limit: int = 200) -> dict:
+    def get_forced_takeover_summary(self, *, limit: int = 200, period: str = "30d") -> dict:
+        self.last_period = period
         return {
+            "period": period,
+            "period_label": "7 дней" if period == "7d" else "30 дней",
             "today_count": 1,
             "week_count": 2,
             "total_count": 2,

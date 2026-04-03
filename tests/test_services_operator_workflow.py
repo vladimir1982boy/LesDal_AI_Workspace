@@ -260,6 +260,72 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["operator"], "Supervisor 1")
         self.assertEqual(summary["resolution_speed"]["forced_to_resolution_by_operator"][0]["median_minutes"], 40)
 
+    def test_forced_takeover_summary_applies_today_period_to_event_metrics(self) -> None:
+        self.repo.forced_events = [
+            {
+                "conversation_id": 3,
+                "actor": "Lead",
+                "created_at": "2026-04-03T10:00:00+00:00",
+                "payload": {"previous_owner_id": "alice"},
+                "display_name": "Today User",
+                "channel": "vk",
+            },
+            {
+                "conversation_id": 4,
+                "actor": "Lead",
+                "created_at": "2026-04-01T10:00:00+00:00",
+                "payload": {"previous_owner_id": "bob"},
+                "display_name": "Older User",
+                "channel": "telegram",
+            },
+        ]
+        self.repo.transition_events = [
+            {
+                "id": 1,
+                "conversation_id": 3,
+                "event_type": "customer_waiting_manager",
+                "created_at": "2026-04-03T10:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 2,
+                "conversation_id": 3,
+                "event_type": "manager_reply",
+                "actor": "Alice",
+                "created_at": "2026-04-03T10:10:00+00:00",
+                "payload": {"text": "Reply 1", "operator_id": "alice"},
+            },
+            {
+                "id": 3,
+                "conversation_id": 4,
+                "event_type": "customer_waiting_manager",
+                "created_at": "2026-04-01T11:00:00+00:00",
+                "payload": {"status": "waiting_manager"},
+            },
+            {
+                "id": 4,
+                "conversation_id": 4,
+                "event_type": "manager_reply",
+                "actor": "Bob",
+                "created_at": "2026-04-01T11:30:00+00:00",
+                "payload": {"text": "Reply 2", "operator_id": "bob"},
+            },
+        ]
+
+        from unittest import mock
+        from datetime import datetime, timezone
+
+        with mock.patch("src.ai_sales_bot.services._utcnow", return_value=datetime(2026, 4, 3, 12, 0, tzinfo=timezone.utc)):
+            summary = self.service.get_forced_takeover_summary(limit=10, period="today")
+
+        self.assertEqual(summary["period"], "today")
+        self.assertEqual(summary["period_label"], "Сегодня")
+        self.assertEqual(summary["total_count"], 1)
+        self.assertEqual(summary["today_count"], 1)
+        self.assertEqual(summary["week_count"], 1)
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_samples"], 1)
+        self.assertEqual(summary["resolution_speed"]["waiting_to_first_reply_median_minutes"], 10)
+
 
 class _FakeRepository:
     def __init__(self, snapshot: ConversationSnapshot) -> None:

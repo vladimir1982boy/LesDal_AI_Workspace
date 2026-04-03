@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Protocol
 import json
@@ -57,6 +57,18 @@ def _coerce_event_payload(raw_payload: object) -> dict:
     return {}
 
 
+def _resolve_audit_period(period: str, *, now: datetime) -> tuple[str, str, datetime | None]:
+    normalized = str(period or "30d").strip().lower()
+    if normalized == "today":
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        return "today", "Сегодня", start
+    if normalized == "7d":
+        return "7d", "7 дней", now.replace(microsecond=0) - timedelta(days=7)
+    if normalized == "30d":
+        return "30d", "30 дней", now.replace(microsecond=0) - timedelta(days=30)
+    return "30d", "30 дней", now.replace(microsecond=0) - timedelta(days=30)
+
+
 def _median_minutes(samples: list[int]) -> int | float | None:
     if not samples:
         return None
@@ -79,6 +91,7 @@ def _collect_resolution_minutes(
     events: list[dict],
     *,
     start_types: set[str],
+    since: datetime | None = None,
     finish_types: set[str] | None = None,
     finish_matcher=None,
 ) -> list[int]:
@@ -98,6 +111,9 @@ def _collect_resolution_minutes(
         if not conversation_id or not event_type or created_at is None:
             continue
         if event_type in start_types:
+            if since is not None and created_at < since:
+                pending_started_at.pop(conversation_id, None)
+                continue
             pending_started_at[conversation_id] = created_at
             continue
         started_at = pending_started_at.get(conversation_id)
@@ -122,6 +138,7 @@ def _collect_resolution_minutes_by_operator(
     *,
     start_types: set[str],
     operator_from: str,
+    since: datetime | None = None,
     finish_types: set[str] | None = None,
     finish_matcher=None,
     descending: bool = False,
@@ -144,6 +161,10 @@ def _collect_resolution_minutes_by_operator(
         if not conversation_id or not event_type or created_at is None:
             continue
         if event_type in start_types:
+            if since is not None and created_at < since:
+                pending_started_at.pop(conversation_id, None)
+                pending_operator.pop(conversation_id, None)
+                continue
             pending_started_at[conversation_id] = created_at
             if operator_from == "start":
                 pending_operator[conversation_id] = _event_operator_identity(row)
@@ -593,7 +614,7 @@ class SalesBotService:
         rows = self.repository.list_conversation_events(conversation_id, limit=limit)
         return [dict(row) for row in rows]
 
-    def get_forced_takeover_summary(self, *, limit: int = 200) -> dict:
+    def get_forced_takeover_summary(self, *, limit: int = 200, period: str = "30d") -> dict:
         rows = self.repository.list_forced_takeover_events(limit=limit)
         events = [dict(row) for row in rows]
         current_rows = [dict(row) for row in self.repository.list_recent_conversations(limit=1000)]
@@ -611,13 +632,22 @@ class SalesBotService:
             )
         ]
         now = _utcnow()
+        normalized_period, period_label, period_start = _resolve_audit_period(period, now=now)
         today = now.date()
         week_start = now.date().fromordinal(today.toordinal() - today.weekday())
+        filtered_events = [
+            row for row in events
+            if period_start is None
+            or (
+                (created_at := _parse_event_time(row.get("created_at"))) is not None
+                and created_at >= period_start
+            )
+        ]
         today_count = 0
         week_count = 0
         by_operator: dict[str, int] = {}
         recent: list[dict] = []
-        for row in events:
+        for row in filtered_events:
             created_at_raw = row.get("created_at")
             created_at = None
             if created_at_raw:
@@ -680,11 +710,13 @@ class SalesBotService:
         waiting_to_reply_minutes = _collect_resolution_minutes(
             transition_rows,
             start_types={"customer_waiting_manager"},
+            since=period_start,
             finish_types={"manager_reply"},
         )
         forced_to_resolution_minutes = _collect_resolution_minutes(
             transition_rows,
             start_types={"force_claimed_by_supervisor"},
+            since=period_start,
             finish_types={"returned_to_ai"},
             finish_matcher=lambda row: (
                 str(row.get("event_type") or "") == "status_changed"
@@ -695,12 +727,14 @@ class SalesBotService:
             transition_rows,
             start_types={"customer_waiting_manager"},
             operator_from="finish",
+            since=period_start,
             finish_types={"manager_reply"},
         )
         forced_to_resolution_by_operator = _collect_resolution_minutes_by_operator(
             transition_rows,
             start_types={"force_claimed_by_supervisor"},
             operator_from="start",
+            since=period_start,
             finish_types={"returned_to_ai"},
             finish_matcher=lambda row: (
                 str(row.get("event_type") or "") == "status_changed"
@@ -717,9 +751,11 @@ class SalesBotService:
             "forced_to_resolution_by_operator": forced_to_resolution_by_operator[:8],
         }
         return {
+            "period": normalized_period,
+            "period_label": period_label,
             "today_count": today_count,
             "week_count": week_count,
-            "total_count": len(events),
+            "total_count": len(filtered_events),
             "by_operator": by_operator_items,
             "recent": recent[:8],
             "ownership_quality": ownership_quality,

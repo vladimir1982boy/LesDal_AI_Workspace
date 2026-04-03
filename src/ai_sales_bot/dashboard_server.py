@@ -111,7 +111,11 @@ def build_dashboard_handler(api: OperatorInboxAPI):
                 if self._current_operator() is None:
                     self._send_json({"error": "Operator session required"}, status=HTTPStatus.UNAUTHORIZED)
                     return
-                self._send_json(api.get_forced_takeover_summary())
+                self._send_json(
+                    api.get_forced_takeover_summary(
+                        period=self._query_str(parsed.query, "period") or "30d"
+                    )
+                )
                 return
             if parsed.path == "/api/conversations":
                 if self._current_operator() is None:
