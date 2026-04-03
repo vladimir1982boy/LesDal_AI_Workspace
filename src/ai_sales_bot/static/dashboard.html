@@ -247,6 +247,10 @@
     .badge.status-waiting_manager { background: #ffe0d6; color: var(--danger); }
     .badge.status-closed { background: #ececec; color: #666; }
     .badge.owner { background: #eef0ff; color: #46508b; }
+    .badge.sla-fresh { background: #e5f3e8; color: #2f6b52; }
+    .badge.sla-watch { background: #f6ecd9; color: #8a6435; }
+    .badge.sla-hot { background: #ffe0d6; color: var(--danger); }
+    .badge.sla-cold { background: #eef1f6; color: #546173; }
     .attention-dot {
       width: 10px;
       height: 10px;
@@ -585,6 +589,81 @@
       return `<span class="badge owner">${escapeHtml(owner)}</span>`;
     }
 
+    function parseIso(value) {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function elapsedMinutes(value) {
+      const date = parseIso(value);
+      if (!date) {
+        return null;
+      }
+      return Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000));
+    }
+
+    function humanElapsed(minutes) {
+      if (minutes === null) {
+        return "без отметки";
+      }
+      if (minutes < 1) {
+        return "только что";
+      }
+      if (minutes < 60) {
+        return `${minutes} мин`;
+      }
+      const hours = Math.floor(minutes / 60);
+      const rest = minutes % 60;
+      if (hours < 24) {
+        return rest ? `${hours} ч ${rest} мин` : `${hours} ч`;
+      }
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      return remHours ? `${days} д ${remHours} ч` : `${days} д`;
+    }
+
+    function slaSnapshot(item) {
+      const waitingAt = item.last_customer_message_at || item.last_message_at;
+      const managerAt = item.last_manager_message_at || item.last_message_at;
+      const source = item.status === "waiting_manager" ? waitingAt : managerAt;
+      const minutes = elapsedMinutes(source);
+      if (item.status === "waiting_manager") {
+        if (minutes === null) {
+          return { level: "watch", label: "Ждёт ответа", age: "без времени", score: 45 };
+        }
+        if (minutes >= 30) {
+          return { level: "hot", label: "Просрочено", age: humanElapsed(minutes), score: 300 + minutes };
+        }
+        if (minutes >= 10) {
+          return { level: "watch", label: "Скоро SLA", age: humanElapsed(minutes), score: 200 + minutes };
+        }
+        return { level: "fresh", label: "Свежий запрос", age: humanElapsed(minutes), score: 100 + minutes };
+      }
+      if (item.status === "in_progress") {
+        if (minutes === null) {
+          return { level: "cold", label: "В работе", age: "без времени", score: 20 };
+        }
+        if (minutes >= 120) {
+          return { level: "watch", label: "Давно без ответа", age: humanElapsed(minutes), score: 80 + minutes };
+        }
+        return { level: "cold", label: "В работе", age: humanElapsed(minutes), score: minutes };
+      }
+      if (item.status === "new") {
+        const freshMinutes = elapsedMinutes(item.last_customer_message_at || item.last_message_at);
+        if (freshMinutes === null) {
+          return { level: "cold", label: "Новый диалог", age: "без времени", score: 10 };
+        }
+        if (freshMinutes >= 20) {
+          return { level: "watch", label: "Новый без разбора", age: humanElapsed(freshMinutes), score: 60 + freshMinutes };
+        }
+        return { level: "fresh", label: "Новый диалог", age: humanElapsed(freshMinutes), score: 30 + freshMinutes };
+      }
+      return { level: "cold", label: "Архив", age: humanElapsed(elapsedMinutes(item.last_message_at)), score: 0 };
+    }
+
     function queueLabel(status) {
       if (status === "new") return "Новые";
       if (status === "in_progress") return "В работе";
@@ -636,6 +715,7 @@
       const summary = item.summary || "Без summary, менеджер может открыть переписку и взять диалог в работу.";
       const rootClass = compact ? "archive-card" : `conversation-item ${item.id === state.selectedId ? "active" : ""}`;
       const activeClass = compact && item.id === state.selectedId ? "active" : "";
+      const sla = slaSnapshot(item);
       return `
         <article class="${rootClass}${activeClass ? ` ${activeClass}` : ""}" data-id="${item.id}">
           <div class="item-top">
@@ -648,9 +728,13 @@
             ${statusBadge(item.status || "new")}
           </div>
           <div class="owner-row" style="margin-top:10px;">
-            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">${ownerBadge(item.owner_name || "")}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              ${ownerBadge(item.owner_name || "")}
+              <span class="badge sla-${sla.level}">${escapeHtml(sla.label)}</span>
+            </div>
             <div style="font-size:12px; color:var(--muted);">${escapeHtml(item.last_message_at || "")}</div>
           </div>
+          <div style="margin-top:8px; font-size:12px; color:var(--muted);">Ожидание: ${escapeHtml(sla.age)}</div>
           <div class="item-summary">${escapeHtml(summary)}</div>
           ${cardActions(item, compact)}
         </article>
@@ -694,6 +778,9 @@
           return;
         }
         grouped.new.push(item);
+      });
+      Object.values(grouped).forEach((items) => {
+        items.sort((left, right) => slaSnapshot(right).score - slaSnapshot(left).score);
       });
       el.list.innerHTML = `
         ${queueColumn("new", grouped.new)}
