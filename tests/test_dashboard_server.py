@@ -121,6 +121,39 @@ class DashboardServerSessionTests(unittest.TestCase):
         self.assertTrue(expired)
         self.assertEqual(sessions, {})
 
+    def test_end_to_end_expired_session_requires_relogin(self) -> None:
+        session = _create_operator_session(self.operator, now=self.now)
+        sessions = {"token-1": session}
+
+        payload, expired = _consume_operator_session(
+            sessions,
+            "token-1",
+            ttl_minutes=30,
+            now=self.now + timedelta(minutes=10),
+            refresh=True,
+        )
+        self.assertFalse(expired)
+        self.assertEqual(payload["operator_id"], "alice")
+
+        payload, expired = _consume_operator_session(
+            sessions,
+            "token-1",
+            ttl_minutes=30,
+            now=self.now + timedelta(minutes=41),
+            refresh=True,
+        )
+
+        self.assertIsNone(payload)
+        self.assertTrue(expired)
+        self.assertEqual(sessions, {})
+        self.assertEqual(
+            _error_payload("Session expired", reason="session_expired"),
+            {
+                "error": "Session expired",
+                "reason": "session_expired",
+            },
+        )
+
 
 class DashboardServerPayloadTests(unittest.TestCase):
     def test_error_payload_keeps_reason_and_extra_fields(self) -> None:

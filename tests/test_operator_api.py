@@ -125,6 +125,77 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertFalse(result.retry_available)
         self.assertEqual(result.outbound_result.message_id, "existing-vk-id")
 
+    def test_end_to_end_waiting_manager_claim_reply_flow(self) -> None:
+        self.snapshot.mode = ConversationMode.MANAGER
+        self.snapshot.status = ConversationStatus.WAITING_MANAGER
+        self.snapshot.owner_id = ""
+        self.snapshot.owner_name = ""
+
+        claim_result = self.api.claim_conversation(
+            3,
+            operator_name="Alice",
+            operator_id="alice",
+        )
+        reply_result = self.api.reply_to_conversation(
+            3,
+            text="Берем диалог в работу, сейчас помогу.",
+            pause_ai=True,
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.assertEqual(claim_result.snapshot.status, ConversationStatus.IN_PROGRESS)
+        self.assertEqual(claim_result.snapshot.owner_id, "alice")
+        self.assertTrue(reply_result.outbound_sent)
+        self.assertFalse(reply_result.retry_available)
+        self.assertEqual(reply_result.snapshot.owner_id, "alice")
+        self.assertEqual(reply_result.snapshot.owner_name, "Alice")
+        self.assertEqual(self.dispatcher.sent[-1]["text"], "Берем диалог в работу, сейчас помогу.")
+        self.assertEqual(self.service.last_send_outcome["event"], "reply_send_succeeded")
+
+    def test_end_to_end_reply_failure_then_retry_success(self) -> None:
+        self.snapshot.mode = ConversationMode.MANAGER
+        self.snapshot.status = ConversationStatus.WAITING_MANAGER
+        self.snapshot.owner_id = ""
+        self.snapshot.owner_name = ""
+
+        self.dispatcher.next_result = OutboundSendResult(
+            ok=False,
+            channel=Channel.VK,
+            error="network timeout",
+            retryable=True,
+        )
+        failed_result = self.api.reply_to_conversation(
+            3,
+            text="Сейчас отправлю детали.",
+            pause_ai=True,
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.dispatcher.next_result = OutboundSendResult(
+            ok=True,
+            channel=Channel.VK,
+            message_id="vk-retry-1",
+        )
+        retry_result = self.api.retry_reply_delivery(
+            3,
+            delivery_key=failed_result.reply_delivery_key,
+            operator_name="Alice",
+            operator_id="alice",
+        )
+
+        self.assertFalse(failed_result.outbound_sent)
+        self.assertTrue(failed_result.retry_available)
+        self.assertEqual(failed_result.outbound_result.error, "network timeout")
+        self.assertTrue(retry_result.outbound_sent)
+        self.assertFalse(retry_result.retry_available)
+        self.assertEqual(retry_result.outbound_result.message_id, "vk-retry-1")
+        self.assertEqual(self.dispatcher.sent[-2]["text"], "Сейчас отправлю детали.")
+        self.assertEqual(self.dispatcher.sent[-1]["text"], "Сейчас отправлю детали.")
+        self.assertEqual(self.service.last_retry_request["delivery_key"], failed_result.reply_delivery_key)
+        self.assertEqual(self.service.last_send_outcome["event"], "reply_send_retried")
+
     def test_pause_conversation_switches_mode(self) -> None:
         result = self.api.pause_conversation(3)
 
@@ -520,6 +591,11 @@ class _FakeService:
             "text": text,
             "pause_ai": pause_ai,
             "delivery_key": delivery_key,
+        }
+        self.retry_context[delivery_key] = {
+            "text": text,
+            "already_delivered": False,
+            "previous_result": None,
         }
         return self.snapshot
 
