@@ -119,10 +119,16 @@ class OperatorInboxAPITests(unittest.TestCase):
         self.assertEqual(self.service.last_profile["actor_id"], "alice")
 
     def test_get_conversation_includes_reply_templates(self) -> None:
+        self.snapshot.status = ConversationStatus.WAITING_MANAGER
+        self.snapshot.owner_name = "Alice"
+
         payload = self.api.get_conversation(3)
 
         self.assertTrue(payload["reply_templates"])
         self.assertIn("title", payload["reply_templates"][0])
+        self.assertEqual(payload["snapshot"]["status"], "waiting_manager")
+        self.assertEqual(payload["snapshot"]["owner_name"], "Alice")
+        self.assertIn("owner_claimed_at", payload["snapshot"])
 
     def test_get_forced_takeover_summary_proxies_service_summary(self) -> None:
         payload = self.api.get_forced_takeover_summary(period="7d")

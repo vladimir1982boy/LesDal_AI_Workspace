@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 import unittest
 from pathlib import Path
 from uuid import uuid4
@@ -181,6 +183,77 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertTrue(refreshed.has_forced_takeover)
         self.assertEqual(refreshed.last_forced_takeover_by, "Lead")
 
+    def test_sqlite_migrates_legacy_conversation_schema_idempotently(self) -> None:
+        with sqlite3.connect(self.sqlite_path) as conn:
+            conn.execute("PRAGMA journal_mode=MEMORY;")
+            conn.execute("PRAGMA temp_store=MEMORY;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.executescript(
+                """
+                CREATE TABLE contacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel TEXT NOT NULL,
+                    external_user_id TEXT NOT NULL,
+                    username TEXT NOT NULL DEFAULT '',
+                    display_name TEXT NOT NULL DEFAULT '',
+                    phone TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE leads (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contact_id INTEGER NOT NULL UNIQUE,
+                    source_channel TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    city TEXT NOT NULL DEFAULT '',
+                    summary TEXT NOT NULL DEFAULT '',
+                    interested_products TEXT NOT NULL DEFAULT '[]',
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    amocrm_lead_id TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    last_message_at TEXT NOT NULL
+                );
+                CREATE TABLE conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contact_id INTEGER NOT NULL,
+                    channel TEXT NOT NULL,
+                    external_chat_id TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'open',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    last_message_at TEXT NOT NULL
+                );
+                """
+            )
+
+        SQLiteLeadRepository(self.sqlite_path)
+        SQLiteLeadRepository(self.sqlite_path)
+
+        with sqlite3.connect(self.sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(conversations)").fetchall()
+            }
+            self.assertTrue(
+                {
+                    "owner_id",
+                    "owner_name",
+                    "owner_claimed_at",
+                    "last_customer_message_at",
+                    "last_manager_message_at",
+                    "needs_attention",
+                }.issubset(columns)
+            )
+            tables = {
+                row["name"]
+                for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            self.assertIn("conversation_events", tables)
+
     def test_json_can_store_and_list_conversation_events(self) -> None:
         repo = JSONLeadRepository(self.json_path)
         snapshot = self._ingest(repo)
@@ -240,6 +313,82 @@ class StorageOperatorFoundationTests(unittest.TestCase):
         self.assertEqual(row["last_forced_takeover_by"], "Lead")
         self.assertTrue(refreshed.has_forced_takeover)
         self.assertEqual(refreshed.last_forced_takeover_by, "Lead")
+
+    def test_json_load_backfills_legacy_conversation_structure(self) -> None:
+        legacy = {
+            "counters": {
+                "contacts": 1,
+                "leads": 1,
+                "conversations": 1,
+                "messages": 1,
+                "lead_events": 0,
+            },
+            "contacts": [
+                {
+                    "id": 1,
+                    "channel": "vk",
+                    "external_user_id": "user-1",
+                    "username": "tester",
+                    "display_name": "Test User",
+                    "phone": "",
+                    "created_at": "2026-04-01T10:00:00+00:00",
+                    "updated_at": "2026-04-01T10:00:00+00:00",
+                }
+            ],
+            "leads": [
+                {
+                    "id": 1,
+                    "contact_id": 1,
+                    "source_channel": "vk",
+                    "stage": "new",
+                    "mode": "ai",
+                    "city": "",
+                    "summary": "",
+                    "interested_products": [],
+                    "tags": [],
+                    "created_at": "2026-04-01T10:00:00+00:00",
+                    "updated_at": "2026-04-01T10:00:00+00:00",
+                    "last_message_at": "2026-04-01T10:00:00+00:00",
+                }
+            ],
+            "conversations": [
+                {
+                    "id": 1,
+                    "contact_id": 1,
+                    "channel": "vk",
+                    "external_chat_id": "chat-1",
+                    "mode": "ai",
+                    "created_at": "2026-04-01T10:00:00+00:00",
+                    "updated_at": "2026-04-01T10:00:00+00:00",
+                    "last_message_at": "2026-04-01T10:00:00+00:00",
+                }
+            ],
+            "messages": [
+                {
+                    "id": 1,
+                    "conversation_id": 1,
+                    "sender_role": "customer",
+                    "sender_name": "Test User",
+                    "text": "Need help",
+                    "raw_payload": {},
+                    "created_at": "2026-04-01T10:00:00+00:00",
+                }
+            ],
+            "lead_events": [],
+            "inbound_events": [],
+        }
+        self.json_path.write_text(json.dumps(legacy, ensure_ascii=False), encoding="utf-8")
+
+        repo = JSONLeadRepository(self.json_path)
+        snapshot = repo.get_snapshot(1)
+        target = repo.get_conversation_target(1)
+
+        self.assertEqual(snapshot.status.value, "new")
+        self.assertEqual(snapshot.owner_name, "")
+        self.assertFalse(snapshot.needs_attention)
+        self.assertEqual(target["external_user_id"], "user-1")
+        rows = repo.list_conversation_events(1, limit=10)
+        self.assertEqual(rows, [])
 
     def _ingest(self, repo: SQLiteLeadRepository | JSONLeadRepository):
         return repo.ingest_customer_message(
