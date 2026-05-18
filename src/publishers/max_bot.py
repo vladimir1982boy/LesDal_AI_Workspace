@@ -19,6 +19,8 @@ from pathlib import Path
 
 import requests
 
+from src.ai_sales_bot.config import load_project_env
+
 logger = logging.getLogger("lesdal.max")
 
 BASE_URL = "https://platform-api.max.ru/messages"
@@ -204,6 +206,8 @@ def publish_to_max(text: str, image_path: str | Path | None = None) -> bool:
     chat_id is passed as query parameter (?chat_id=...), while body keeps message
     payload fields (text/files).
     """
+    load_project_env()
+
     token = os.getenv("MAX_BOT_TOKEN", "").strip()
     chat_id = os.getenv("MAX_CHANNEL_ID", "").strip()
 

@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>LesDal Mobile Inbox</title>
+  <style>
+    :root {
+      --bg: #f4ecdf;
+      --panel: #fffaf2;
+      --ink: #2b231c;
+      --muted: #7a6b5e;
+      --accent: #2f6b52;
+      --accent-soft: #dff1e7;
+      --warn: #c56b47;
+      --danger: #b84d35;
+      --line: #dfd0bd;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+    .app {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .section {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .section:last-child {
+      border-bottom: 0;
+    }
+    h1, h2, h3, p {
+      margin: 0;
+    }
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 14px;
+    }
+    input, select, textarea {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+      padding: 12px 14px;
+    }
+    textarea {
+      min-height: 108px;
+      resize: vertical;
+    }
+    button {
+      border: 0;
+      padding: 12px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); color: white; }
+    button.secondary { background: #eadbc8; color: #5b4534; }
+    button.warn { background: var(--warn); color: white; }
+    button.ghost { background: #f2ece2; color: #5e5348; }
+    button:disabled { opacity: 0.55; cursor: default; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #efe5d7;
+      color: #6f4d2f;
+    }
+    .pill.waiting { background: #ffe0d6; color: var(--danger); }
+    .pill.progress { background: var(--accent-soft); color: var(--accent); }
+    .toolbar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .toolbar button.active {
+      background: var(--accent);
+      color: white;
+    }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .status.error { color: var(--danger); font-weight: 700; }
+    .conversation-list {
+      display: grid;
+      gap: 10px;
+    }
+    .conversation-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: white;
+      cursor: pointer;
+    }
+    .conversation-card.active {
+      border-color: var(--accent);
+      background: #f3fbf6;
+    }
+    .conversation-card.waiting {
+      border-color: #e0b39e;
+      background: #fff4ef;
+    }
+    .card-top, .card-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+    .card-name {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .card-text {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .messages {
+      display: grid;
+      gap: 10px;
+      max-height: 42vh;
+      overflow: auto;
+    }
+    .message {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: white;
+      border: 1px solid var(--line);
+      white-space: pre-wrap;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .message.customer { background: #fff0de; }
+    .message.ai { background: #eef7f1; }
+    .message.manager { background: #e8f0ff; }
+    .message.system { background: #f5f0ea; color: var(--muted); }
+    .message-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      padding: 20px 14px;
+      font-size: 14px;
+    }
+    .detail-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .detail-badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    @media (max-width: 480px) {
+      .grid-2, .detail-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel">
+      <div class="section">
+        <h1>LesDal Mobile Inbox</h1>
+        <p class="subtitle">Облегчённая мобильная панель менеджера: взять диалог, ответить, вернуть AI.</p>
+        <div class="stack">
+          <select id="operatorSelect"></select>
+          <input id="operatorPin" type="password" placeholder="PIN оператора">
+          <div class="grid-2">
+            <button id="loginButton" class="secondary">Войти</button>
+            <button id="logoutButton" class="ghost">Выйти</button>
+          </div>
+          <div id="operatorState" class="status">Оператор не авторизован.</div>
+        </div>
+      </div>
+      <div class="section">
+        <input id="searchInput" placeholder="Поиск по имени или chat id">
+        <div class="toolbar">
+          <button id="filterWaiting" class="ghost active">Ждут</button>
+          <button id="filterMine" class="ghost">Мои</button>
+          <button id="filterAll" class="ghost">Все</button>
+        </div>
+      </div>
+      <div class="section">
+        <div id="conversationList" class="conversation-list">
+          <div class="empty">Список диалогов появится после входа.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section">
+        <h2 id="detailTitle">Диалог не выбран</h2>
+        <p id="detailSubtitle" class="subtitle">Откройте диалог из списка выше.</p>
+        <div id="detailBadges" class="detail-badges"></div>
+      </div>
+      <div class="section">
+        <div id="messageList" class="messages">
+          <div class="empty">История появится после выбора диалога.</div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="detail-actions">
+          <button id="claimButton" class="secondary" disabled>Взять диалог</button>
+          <button id="resumeButton" class="warn" disabled>Вернуть AI</button>
+        </div>
+      </div>
+      <div class="section">
+        <textarea id="replyText" placeholder="Ответ менеджера клиенту..." disabled></textarea>
+        <div class="stack">
+          <button id="replyButton" class="primary" disabled>Отправить ответ</button>
+          <div id="statusLine" class="status">Mobile inbox готов.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const operatorSessionStorageKey = "lesdal.mobile.operator_session";
+    const operatorChoiceStorageKey = "lesdal.mobile.operator_choice";
+    const state = {
+      operatorSessionToken: localStorage.getItem(operatorSessionStorageKey) || "",
+      selectedOperatorId: localStorage.getItem(operatorChoiceStorageKey) || "",
+      operator: null,
+      operators: [],
+      filter: "waiting",
+      conversations: [],
+      selectedId: null,
+      detail: null,
+    };
+
+    const el = {
+      operatorSelect: document.getElementById("operatorSelect"),
+      operatorPin: document.getElementById("operatorPin"),
+      loginButton: document.getElementById("loginButton"),
+      logoutButton: document.getElementById("logoutButton"),
+      operatorState: document.getElementById("operatorState"),
+      searchInput: document.getElementById("searchInput"),
+      filterWaiting: document.getElementById("filterWaiting"),
+      filterMine: document.getElementById("filterMine"),
+      filterAll: document.getElementById("filterAll"),
+      conversationList: document.getElementById("conversationList"),
+      detailTitle: document.getElementById("detailTitle"),
+      detailSubtitle: document.getElementById("detailSubtitle"),
+      detailBadges: document.getElementById("detailBadges"),
+      messageList: document.getElementById("messageList"),
+      claimButton: document.getElementById("claimButton"),
+      resumeButton: document.getElementById("resumeButton"),
+      replyText: document.getElementById("replyText"),
+      replyButton: document.getElementById("replyButton"),
+      statusLine: document.getElementById("statusLine"),
+    };
+
+    function authHeaders(extra = {}) {
+      const headers = { ...extra };
+      if (state.operatorSessionToken) {
+        headers["X-Operator-Session"] = state.operatorSessionToken;
+      }
+      return headers;
+    }
+
+    async function apiFetch(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: authHeaders({
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(payload.error || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.reason = payload.reason || "";
+        error.payload = payload;
+        throw error;
+      }
+      return payload;
+    }
+
+    function setStatus(text, tone = "info") {
+      el.statusLine.textContent = text;
+      el.statusLine.className = tone === "error" ? "status error" : "status";
+    }
+
+    function formatStatus(value) {
+      return ({
+        new: "новый",
+        in_progress: "в работе",
+        waiting_manager: "ждёт менеджера",
+        closed: "закрыт",
+      })[String(value || "")] || String(value || "-");
+    }
+
+    function formatMode(value) {
+      return ({
+        ai: "AI",
+        manager: "manager",
+      })[String(value || "")] || String(value || "-");
+    }
+
+    function currentOperatorId() {
+      return state.operator?.operator_id || "";
+    }
+
+    function ownedByMe(snapshot) {
+      if (!snapshot || !state.operator) return false;
+      const ownerId = String(snapshot.owner_id || "");
+      const ownerName = String(snapshot.owner_name || "");
+      return ownerId
+        ? ownerId === currentOperatorId()
+        : ownerName === String(state.operator.display_name || "");
+    }
+
+    function renderAuth() {
+      const options = state.operators.length
+        ? state.operators.map((item) => `<option value="${escapeAttr(item.operator_id)}">${escapeHtml(item.display_name)} · ${escapeHtml(item.role || "manager")}</option>`).join("")
+        : `<option value="">Операторы не настроены</option>`;
+      el.operatorSelect.innerHTML = options;
+      if (state.selectedOperatorId && state.operators.some((item) => item.operator_id === state.selectedOperatorId)) {
+        el.operatorSelect.value = state.selectedOperatorId;
+      } else if (state.operators.length === 1) {
+        el.operatorSelect.value = state.operators[0].operator_id;
+      }
+      const online = Boolean(state.operator);
+      el.operatorSelect.disabled = online || !state.operators.length;
+      el.operatorPin.disabled = online;
+      el.loginButton.disabled = !state.operators.length;
+      el.logoutButton.disabled = !online;
+      if (online) {
+        el.operatorState.textContent = `Оператор: ${state.operator.display_name} · ${state.operator.role || "manager"}`;
+      } else if (state.operators.length === 1) {
+        const operator = state.operators[0];
+        el.operatorState.textContent = `Доступный оператор: ${operator.display_name} · ${operator.role || "manager"}${operator.pin_required ? " · нужен PIN" : " · PIN не требуется"}`;
+      } else {
+        el.operatorState.textContent = "Оператор не авторизован.";
+      }
+    }
+
+    async function loadOperators() {
+      const payload = await apiFetch("/api/auth/operators");
+      state.operators = payload.items || [];
+      renderAuth();
+    }
+
+    async function restoreSession() {
+      if (!state.operatorSessionToken) {
+        renderAuth();
+        return false;
+      }
+      try {
+        const payload = await apiFetch("/api/auth/session");
+        state.operator = payload.operator || null;
+        renderAuth();
+        return Boolean(state.operator);
+      } catch (error) {
+        state.operatorSessionToken = "";
+        state.operator = null;
+        localStorage.removeItem(operatorSessionStorageKey);
+        renderAuth();
+        return false;
+      }
+    }
+
+    async function login() {
+      const operatorId = el.operatorSelect.value || (state.operators.length === 1 ? state.operators[0].operator_id : "");
+      if (!operatorId) {
+        setStatus("Выберите оператора для входа.", "error");
+        return false;
+      }
+      const payload = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          operator_id: operatorId,
+          pin: el.operatorPin.value.trim(),
+        }),
+      });
+      state.operatorSessionToken = payload.session_token || "";
+      state.operator = payload.operator || null;
+      state.selectedOperatorId = state.operator?.operator_id || operatorId;
+      localStorage.setItem(operatorSessionStorageKey, state.operatorSessionToken);
+      localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
+      el.operatorPin.value = "";
+      renderAuth();
+      setStatus(`Вошли как ${state.operator.display_name}.`);
+      return true;
+    }
+
+    async function logout() {
+      try {
+        await apiFetch("/api/auth/logout", { method: "POST", body: "{}" });
+      } catch (error) {
+        // ignore and clear local session
+      }
+      state.operatorSessionToken = "";
+      state.operator = null;
+      localStorage.removeItem(operatorSessionStorageKey);
+      state.conversations = [];
+      state.selectedId = null;
+      state.detail = null;
+      renderAuth();
+      renderConversations();
+      renderDetail();
+      setStatus("Сессия завершена.");
+    }
+
+    function filtersQuery() {
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (state.filter === "waiting") {
+        params.set("status", "waiting_manager");
+      }
+      if (state.filter === "mine" && state.operator) {
+        params.set("owner", currentOperatorId());
+      }
+      if (el.searchInput.value.trim()) {
+        params.set("q", el.searchInput.value.trim());
+      }
+      return params.toString();
+    }
+
+    async function refreshConversations() {
+      if (!state.operator) {
+        state.conversations = [];
+        renderConversations();
+        return;
+      }
+      const payload = await apiFetch(`/api/conversations?${filtersQuery()}`);
+      state.conversations = payload.items || [];
+      renderConversations();
+      if (state.selectedId && state.conversations.some((item) => item.id === state.selectedId)) {
+        await openConversation(state.selectedId, { silent: true });
+      } else if (state.conversations.length && !state.selectedId) {
+        await openConversation(state.conversations[0].id, { silent: true });
+      }
+    }
+
+    function renderConversations() {
+      if (!state.operator) {
+        el.conversationList.innerHTML = `<div class="empty">Сначала войдите как оператор.</div>`;
+        return;
+      }
+      if (!state.conversations.length) {
+        el.conversationList.innerHTML = `<div class="empty">Диалогов под текущий фильтр пока нет.</div>`;
+        return;
+      }
+      el.conversationList.innerHTML = state.conversations.map((item) => `
+        <div class="conversation-card ${item.id === state.selectedId ? "active" : ""} ${item.status === "waiting_manager" ? "waiting" : ""}" data-open="${item.id}">
+          <div class="card-top">
+            <div class="card-name">${escapeHtml(item.display_name || item.username || `Диалог ${item.id}`)}</div>
+            <span class="pill ${item.status === "waiting_manager" ? "waiting" : "progress"}">${escapeHtml(formatStatus(item.status))}</span>
+          </div>
+          <div class="card-meta" style="margin-top:8px;">
+            <div class="subtitle">${escapeHtml(item.channel || "-")} · ${escapeHtml(formatMode(item.mode))}</div>
+            <div class="subtitle">${escapeHtml(item.owner_name || item.owner_id || "-")}</div>
+          </div>
+          <div class="card-text">${escapeHtml(item.summary || item.last_message_text || "Откройте диалог для деталей.")}</div>
+        </div>
+      `).join("");
+      el.conversationList.querySelectorAll("[data-open]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          await openConversation(Number(node.dataset.open));
+        });
+      });
+    }
+
+    async function openConversation(id, options = {}) {
+      if (!state.operator) return;
+      state.selectedId = id;
+      state.detail = await apiFetch(`/api/conversations/${id}`);
+      renderConversations();
+      renderDetail();
+      if (!options.silent) {
+        setStatus(`Открыт диалог [conv:${id}].`);
+      }
+    }
+
+    function renderDetail() {
+      const snapshot = state.detail?.snapshot || null;
+      const transcript = [...(state.detail?.transcript || [])].reverse();
+      if (!snapshot) {
+        el.detailTitle.textContent = "Диалог не выбран";
+        el.detailSubtitle.textContent = "Откройте диалог из списка выше.";
+        el.detailBadges.innerHTML = "";
+        el.messageList.innerHTML = `<div class="empty">История появится после выбора диалога.</div>`;
+        el.claimButton.disabled = true;
+        el.resumeButton.disabled = true;
+        el.replyText.disabled = true;
+        el.replyButton.disabled = true;
+        return;
+      }
+      el.detailTitle.textContent = snapshot.display_name || snapshot.username || `Диалог ${snapshot.conversation_id}`;
+      el.detailSubtitle.textContent = `${snapshot.channel} · режим ${formatMode(snapshot.mode)} · статус ${formatStatus(snapshot.status)}`;
+      el.detailBadges.innerHTML = [
+        `<span class="pill">${escapeHtml(snapshot.owner_name || snapshot.owner_id || "без owner")}</span>`,
+        `<span class="pill ${snapshot.status === "waiting_manager" ? "waiting" : "progress"}">${escapeHtml(formatStatus(snapshot.status))}</span>`,
+      ].join("");
+      el.messageList.innerHTML = transcript.length
+        ? transcript.map((row) => `
+          <div class="message ${escapeHtml(row.sender_role || "system")}">
+            <div class="message-meta">${escapeHtml(row.sender_name || row.sender_role || "unknown")} · ${escapeHtml(row.created_at || "")}</div>
+            ${escapeHtml(row.text || "")}
+          </div>
+        `).join("")
+        : `<div class="empty">В этом диалоге пока нет истории сообщений.</div>`;
+      const mine = ownedByMe(snapshot);
+      const ownedByOther = Boolean(
+        snapshot.owner_id
+          ? snapshot.owner_id !== currentOperatorId()
+          : snapshot.owner_name && snapshot.owner_name !== String(state.operator?.display_name || "")
+      );
+      el.claimButton.disabled = mine || ownedByOther;
+      el.resumeButton.disabled = !mine || snapshot.mode === "ai";
+      el.replyText.disabled = !mine;
+      el.replyButton.disabled = !mine;
+      if (ownedByOther) {
+        setStatus(`Диалог закреплен за ${snapshot.owner_name || snapshot.owner_id}.`, "error");
+      }
+    }
+
+    async function postAction(action, body = {}) {
+      if (!state.selectedId) return;
+      try {
+        await apiFetch(`/api/conversations/${state.selectedId}/${action}`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        await refreshConversations();
+        await openConversation(state.selectedId, { silent: true });
+        if (action === "claim") setStatus("Диалог взят в работу.");
+        else if (action === "resume") setStatus("Диалог возвращён AI.");
+        else if (action === "reply") setStatus("Ответ отправлен клиенту.");
+        else setStatus("Действие выполнено.");
+      } catch (error) {
+        if (error.reason === "session_expired") {
+          state.operator = null;
+          state.operatorSessionToken = "";
+          localStorage.removeItem(operatorSessionStorageKey);
+          renderAuth();
+          setStatus("Сессия истекла. Войдите снова.", "error");
+          return;
+        }
+        setStatus(error.message || "Не удалось выполнить действие.", "error");
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value)
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function activateFilter(nextFilter) {
+      state.filter = nextFilter;
+      el.filterWaiting.classList.toggle("active", nextFilter === "waiting");
+      el.filterMine.classList.toggle("active", nextFilter === "mine");
+      el.filterAll.classList.toggle("active", nextFilter === "all");
+      refreshConversations().catch((error) => setStatus(error.message || "Не удалось обновить список.", "error"));
+    }
+
+    el.loginButton.addEventListener("click", async () => {
+      try {
+        const ok = await login();
+        if (ok) {
+          await refreshConversations();
+        }
+      } catch (error) {
+        setStatus(error.message || "Ошибка входа.", "error");
+      }
+    });
+    el.logoutButton.addEventListener("click", () => {
+      logout().catch(() => setStatus("Не удалось завершить сессию.", "error"));
+    });
+    el.operatorPin.addEventListener("keyup", async (event) => {
+      if (event.key === "Enter") {
+        el.loginButton.click();
+      }
+    });
+    el.operatorSelect.addEventListener("change", () => {
+      state.selectedOperatorId = el.operatorSelect.value;
+      localStorage.setItem(operatorChoiceStorageKey, state.selectedOperatorId);
+    });
+    el.searchInput.addEventListener("keyup", async (event) => {
+      if (event.key === "Enter") {
+        await refreshConversations();
+      }
+    });
+    el.filterWaiting.addEventListener("click", () => activateFilter("waiting"));
+    el.filterMine.addEventListener("click", () => activateFilter("mine"));
+    el.filterAll.addEventListener("click", () => activateFilter("all"));
+    el.claimButton.addEventListener("click", () => postAction("claim"));
+    el.resumeButton.addEventListener("click", () => postAction("resume"));
+    el.replyButton.addEventListener("click", () => {
+      const text = el.replyText.value.trim();
+      if (!text) {
+        setStatus("Введите текст ответа менеджера.", "error");
+        return;
+      }
+      postAction("reply", { text, pause_ai: true }).then(() => {
+        el.replyText.value = "";
+      });
+    });
+
+    async function boot() {
+      try {
+        renderAuth();
+        const restored = await restoreSession();
+        await loadOperators();
+        if (restored) {
+          await refreshConversations();
+        } else {
+          setStatus("Войдите как оператор, чтобы открыть мобильный inbox.");
+        }
+      } catch (error) {
+        setStatus(error.message || "Ошибка загрузки mobile inbox.", "error");
+      }
+    }
+
+    setInterval(async () => {
+      if (!state.operator) return;
+      try {
+        await refreshConversations();
+      } catch (error) {
+        setStatus(error.message || "Не удалось обновить mobile inbox.", "error");
+      }
+    }, 5000);
+
+    boot();
+  </script>
+</body>
+</html>

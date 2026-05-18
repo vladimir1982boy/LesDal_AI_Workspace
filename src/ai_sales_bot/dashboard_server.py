@@ -22,6 +22,10 @@ def _read_dashboard_html() -> bytes:
     return (STATIC_DIR / "dashboard.html").read_bytes()
 
 
+def _read_mobile_dashboard_html() -> bytes:
+    return (STATIC_DIR / "mobile_dashboard.html").read_bytes()
+
+
 class DashboardPermissionError(RuntimeError):
     def __init__(self, message: str, *, reason: str = "forbidden") -> None:
         super().__init__(message)
@@ -189,6 +193,9 @@ def build_dashboard_handler(api: OperatorInboxAPI):
             parsed = urlparse(self.path)
             if parsed.path in {"/", "/index.html"}:
                 self._send_html(_read_dashboard_html())
+                return
+            if parsed.path in {"/mobile", "/mobile.html"}:
+                self._send_html(_read_mobile_dashboard_html())
                 return
             if parsed.path == "/api/health":
                 self._send_json({"ok": True})

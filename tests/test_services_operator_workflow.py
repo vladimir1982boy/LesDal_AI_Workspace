@@ -154,6 +154,23 @@ class SalesBotServiceOperatorWorkflowTests(unittest.TestCase):
         self.assertEqual(self.repo.events[-1]["event_type"], "reply_send_succeeded")
         self.assertEqual(self.repo.events[-1]["payload"]["message_id"], "vk-1")
 
+    def test_escalate_to_manager_marks_waiting_manager_and_logs_event(self) -> None:
+        self.snapshot.mode = ConversationMode.AI
+        self.snapshot.status = ConversationStatus.NEW
+
+        snapshot = self.service.escalate_to_manager(
+            conversation_id=3,
+            actor="LesDal AI",
+            reason="customer_requested_manager",
+            customer_message="Позовите менеджера",
+        )
+
+        self.assertEqual(snapshot.mode, ConversationMode.MANAGER)
+        self.assertEqual(snapshot.status, ConversationStatus.WAITING_MANAGER)
+        self.assertTrue(snapshot.needs_attention)
+        self.assertEqual(self.repo.events[-1]["event_type"], "escalated_to_manager")
+        self.assertEqual(self.repo.events[-1]["payload"]["reason"], "customer_requested_manager")
+
     def test_prepare_reply_retry_skips_already_succeeded_delivery(self) -> None:
         self.repo.events.extend(
             [

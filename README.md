@@ -11,24 +11,39 @@ Internal workspace for LesDal content automation and AI-assisted sales inbox wor
 
 ## Quick Start
 
-1. Create `secrets/.env.local` from `.env.example`.
+1. Copy `.env.example` to `secrets/.env.local`.
 2. Put real credentials only in `secrets/.env.local`.
-3. If Google Sheets sync is needed, place the service account file at `secrets/google-service-account.json`.
-4. Install dependencies:
+3. Save `secrets/.env.local` as `UTF-8` without `BOM`.
+4. If Google Sheets sync is needed, place the service account file at `secrets/google-service-account.json`.
+5. Install dependencies:
 
 ```powershell
 .\.venv\Scripts\pip.exe install -r requirements.txt
 ```
 
-5. Run the dashboard:
+6. Verify that required secrets are visible before the first run:
+
+```powershell
+.\scripts\check_secrets.ps1
+```
+
+7. Run the dashboard:
 
 ```powershell
 python -B AI_BOT\dashboard_main.py
 ```
 
+8. Run the content pipeline:
+
+```powershell
+python main.py --max-posts 1
+```
+
 ## Secrets Policy
 
 - Do not store real secrets in tracked files.
+- The root `.env` may exist as a placeholder, but real runtime secrets should live in `secrets/.env.local`.
+- The project loads secrets from `secrets/.env.local`, then `.env.local`, then `.env`.
 - Do not commit `secrets/`, `.env.local`, `.env.*`, service-account JSON files, or private keys.
 - Use `.env.example` and `credentials.example.json` as safe templates.
 
@@ -47,3 +62,4 @@ See [SECURITY.md](SECURITY.md) for the publication and rotation policy.
 
 - This repository is safe to publish only in its sanitized state.
 - If a real secret was ever committed or shared publicly, rotate it before reuse.
+- If the first key in `secrets/.env.local` is ignored, check that the file was not saved as `UTF-8 with BOM`.

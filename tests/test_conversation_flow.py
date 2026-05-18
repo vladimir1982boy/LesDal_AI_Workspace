@@ -76,6 +76,45 @@ class SalesConversationManagerTests(unittest.TestCase):
         self.assertIsNone(result.reply_text)
         self.assertIn("[conv:3]", result.admin_notification)
 
+    def test_handle_inbound_customer_message_escalates_when_customer_requests_manager(self) -> None:
+        manager = SalesConversationManager(self.runtime)
+
+        result = manager.handle_inbound_customer_message(
+            InboundMessage(
+                channel=Channel.VK,
+                external_user_id="42",
+                external_chat_id="42",
+                text="Позовите менеджера, пожалуйста",
+                username="tester",
+                display_name="Test User",
+            )
+        )
+
+        self.assertEqual(result.snapshot.mode, ConversationMode.MANAGER)
+        self.assertEqual(result.snapshot.status, ConversationStatus.WAITING_MANAGER)
+        self.assertEqual(result.reply_text, "Передаю ваш запрос менеджеру. Он подключится вручную и продолжит диалог.")
+        self.assertEqual(self.service.last_escalation["reason"], "customer_requested_manager")
+
+    def test_handle_inbound_customer_message_escalates_when_ai_fails(self) -> None:
+        manager = SalesConversationManager(self.runtime)
+        manager.assistant = _FailingAssistant()
+
+        result = manager.handle_inbound_customer_message(
+            InboundMessage(
+                channel=Channel.VK,
+                external_user_id="42",
+                external_chat_id="42",
+                text="Нужен нестандартный ответ",
+                username="tester",
+                display_name="Test User",
+            )
+        )
+
+        self.assertEqual(result.snapshot.mode, ConversationMode.MANAGER)
+        self.assertEqual(result.snapshot.status, ConversationStatus.WAITING_MANAGER)
+        self.assertEqual(result.reply_text, "Передаю ваш запрос менеджеру. Он подключится вручную и продолжит диалог.")
+        self.assertEqual(self.service.last_escalation["reason"], "ai_needs_manager")
+
 
 class _FakeConfig:
     gemini_api_key = ""
@@ -94,6 +133,7 @@ class _FakeService:
         self.snapshot = snapshot
         self.recorded_reply = ""
         self.force_manager_takeover = False
+        self.last_escalation: dict = {}
 
     def ingest_inbound_message(self, message: InboundMessage) -> ConversationSnapshot:
         if self.force_manager_takeover:
@@ -113,6 +153,32 @@ class _FakeService:
     def record_ai_reply(self, *, conversation_id: int, text: str) -> ConversationSnapshot:
         self.recorded_reply = text
         return self.snapshot
+
+    def escalate_to_manager(
+        self,
+        *,
+        conversation_id: int,
+        actor: str = "",
+        operator_id: str = "",
+        reason: str = "",
+        customer_message: str = "",
+    ) -> ConversationSnapshot:
+        self.snapshot.mode = ConversationMode.MANAGER
+        self.snapshot.status = ConversationStatus.WAITING_MANAGER
+        self.snapshot.needs_attention = True
+        self.last_escalation = {
+            "conversation_id": conversation_id,
+            "actor": actor,
+            "operator_id": operator_id,
+            "reason": reason,
+            "customer_message": customer_message,
+        }
+        return self.snapshot
+
+
+class _FailingAssistant:
+    def generate_reply(self, **kwargs) -> str:
+        raise RuntimeError("assistant unavailable")
 
 
 if __name__ == "__main__":

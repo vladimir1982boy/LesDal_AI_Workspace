@@ -8,6 +8,32 @@ from .domain import ConversationMode, ConversationSnapshot, InboundMessage
 from .lead_sync import LeadSyncCoordinator
 
 
+MANAGER_REQUEST_MARKERS = (
+    "менеджер",
+    "оператор",
+    "человек",
+    "перезвон",
+    "свяж",
+    "позвон",
+    "human",
+    "manager",
+    "operator",
+    "call me",
+)
+
+MANAGER_HANDOFF_REPLY = (
+    "Передаю ваш запрос менеджеру. Он подключится вручную и продолжит диалог."
+)
+
+AI_FALLBACK_REPLY = (
+    "Сообщение получил. Сейчас могу передать ваш запрос менеджеру или помочь с базовой консультацией позже."
+)
+
+AI_CLARIFY_REPLY = (
+    "Я вас понял. Уточните, пожалуйста, какая у вас основная задача: сон, энергия, фокус, иммунитет или что-то другое?"
+)
+
+
 @dataclass(slots=True)
 class CustomerTurnResult:
     snapshot: ConversationSnapshot
@@ -57,11 +83,58 @@ class SalesConversationManager:
                 admin_notification=admin_notification,
             )
 
+        if self.customer_requests_manager(message.text):
+            snapshot = self.service.escalate_to_manager(
+                conversation_id=snapshot.conversation_id,
+                actor="LesDal AI",
+                reason="customer_requested_manager",
+                customer_message=message.text,
+            )
+            self.lead_sync.sync_snapshot(snapshot)
+            return CustomerTurnResult(
+                snapshot=snapshot,
+                hints=hints,
+                admin_notification=admin_notification,
+                reply_text=MANAGER_HANDOFF_REPLY,
+            )
+
+        try:
+            reply_text = self.generate_ai_reply(snapshot, message.text)
+        except Exception:
+            snapshot = self.service.escalate_to_manager(
+                conversation_id=snapshot.conversation_id,
+                actor="LesDal AI",
+                reason="ai_needs_manager",
+                customer_message=message.text,
+            )
+            self.lead_sync.sync_snapshot(snapshot)
+            return CustomerTurnResult(
+                snapshot=snapshot,
+                hints=hints,
+                admin_notification=admin_notification,
+                reply_text=MANAGER_HANDOFF_REPLY,
+            )
+
+        if self.reply_needs_manager_handoff(reply_text):
+            snapshot = self.service.escalate_to_manager(
+                conversation_id=snapshot.conversation_id,
+                actor="LesDal AI",
+                reason="ai_requested_manager",
+                customer_message=message.text,
+            )
+            self.lead_sync.sync_snapshot(snapshot)
+            return CustomerTurnResult(
+                snapshot=snapshot,
+                hints=hints,
+                admin_notification=admin_notification,
+                reply_text=reply_text,
+            )
+
         return CustomerTurnResult(
             snapshot=snapshot,
             hints=hints,
             admin_notification=admin_notification,
-            reply_text=self.generate_ai_reply(snapshot, message.text),
+            reply_text=reply_text,
         )
 
     def record_outbound_reply(
@@ -78,27 +151,30 @@ class SalesConversationManager:
 
     def generate_ai_reply(self, snapshot: ConversationSnapshot, user_text: str) -> str:
         if self.assistant is None:
-            return (
-                "Сообщение получил. Сейчас могу передать ваш запрос менеджеру или помочь с базовой консультацией позже."
-            )
+            return AI_FALLBACK_REPLY
 
-        try:
-            transcript = self.service.get_transcript(
-                conversation_id=snapshot.conversation_id,
-                limit=16,
-            )
-            reply_text = self.assistant.generate_reply(
-                snapshot=snapshot,
-                transcript=transcript,
-                user_message=user_text,
-            )
-        except Exception:
-            return (
-                "Я зафиксировал ваш запрос. Если хотите, могу продолжить чуть позже или подключить менеджера для точного ответа."
-            )
+        transcript = self.service.get_transcript(
+            conversation_id=snapshot.conversation_id,
+            limit=16,
+        )
+        reply_text = self.assistant.generate_reply(
+            snapshot=snapshot,
+            transcript=transcript,
+            user_message=user_text,
+        )
+        return reply_text or AI_CLARIFY_REPLY
 
-        return reply_text or (
-            "Я вас понял. Уточните, пожалуйста, какая у вас основная задача: сон, энергия, фокус, иммунитет или что-то другое?"
+    def customer_requests_manager(self, text: str) -> bool:
+        lowered = str(text or "").casefold()
+        return any(marker in lowered for marker in MANAGER_REQUEST_MARKERS)
+
+    def reply_needs_manager_handoff(self, text: str) -> bool:
+        lowered = str(text or "").casefold()
+        return (
+            "подключить менеджера" in lowered
+            or "передаю ваш запрос менеджеру" in lowered
+            or "подключится вручную" in lowered
+            or ("manager" in lowered and "connect" in lowered)
         )
 
     def build_admin_notification(self, snapshot: ConversationSnapshot, user_text: str) -> str:

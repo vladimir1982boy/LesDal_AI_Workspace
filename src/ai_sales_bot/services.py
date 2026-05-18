@@ -390,6 +390,42 @@ class SalesBotService:
         )
         return self.repository.get_snapshot(conversation_id)
 
+    def escalate_to_manager(
+        self,
+        *,
+        conversation_id: int,
+        actor: str = "LesDal AI",
+        operator_id: str = "",
+        reason: str = "ai_needs_manager",
+        customer_message: str = "",
+    ) -> ConversationSnapshot:
+        self.repository.update_conversation_state(
+            conversation_id=conversation_id,
+            mode=ConversationMode.MANAGER,
+            status=ConversationStatus.WAITING_MANAGER,
+            clear_owner=True,
+            needs_attention=True,
+        )
+        self.repository.add_message(
+            conversation_id=conversation_id,
+            sender_role=SenderRole.SYSTEM,
+            sender_name="system",
+            text="Conversation escalated to manager.",
+        )
+        self.repository.add_conversation_event(
+            conversation_id=conversation_id,
+            event_type="escalated_to_manager",
+            actor=actor,
+            payload={
+                "reason": reason,
+                "operator_id": operator_id,
+                "customer_message": customer_message,
+                "status": ConversationStatus.WAITING_MANAGER.value,
+                "mode": ConversationMode.MANAGER.value,
+            },
+        )
+        return self.repository.get_snapshot(conversation_id)
+
     def record_manager_reply(
         self,
         *,

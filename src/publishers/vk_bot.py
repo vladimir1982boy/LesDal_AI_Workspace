@@ -24,6 +24,8 @@ from pathlib import Path
 
 import requests
 
+from src.ai_sales_bot.config import load_project_env
+
 logger = logging.getLogger("lesdal.vk")
 
 API_URL = "https://api.vk.com/method"
@@ -263,6 +265,8 @@ def publish_to_vk(text: str, image_path: str | Path | None = None) -> bool:
     The function is best-effort by design: if VK is not configured correctly,
     it logs the reason and returns False without affecting the main pipeline.
     """
+    load_project_env()
+
     token = (
         os.getenv("VK_ACCESS_TOKEN", "").strip()
         or os.getenv("VK_API_KEY", "").strip()
