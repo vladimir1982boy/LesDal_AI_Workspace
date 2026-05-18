@@ -18,6 +18,7 @@ from .app import SalesBotRuntime, create_runtime
 from .conversation_flow import SalesConversationManager
 from .domain import Channel, ConversationMode, ConversationSnapshot, InboundMessage
 from .lead_sync import LeadSyncCoordinator
+from .logging_setup import configure_logging
 from .operator_api import OperatorInboxAPI
 
 
@@ -294,9 +295,5 @@ class TelegramSalesBot:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    configure_logging()
     TelegramSalesBot().run()

@@ -10,6 +10,7 @@ from .admin_notifier import notify_admin_via_telegram
 from .app import SalesBotRuntime, create_runtime
 from .conversation_flow import SalesConversationManager
 from .domain import Channel, InboundMessage
+from .logging_setup import configure_logging
 
 
 logger = logging.getLogger("lesdal.ai_sales.max")
@@ -164,9 +165,5 @@ class MaxSalesBot:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    configure_logging()
     MaxSalesBot().run()
